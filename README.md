@@ -1,6 +1,6 @@
 # Acoustic regularities in infant-directed speech and song across cultures
 
-This is the repository for Hilton & Moser et al. (2022) "Acoustic regularities in infant-directed speech and song across cultures". An open-access version of the paper is available at https://www.biorxiv.org/content/10.1101/2020.04.09.032995v4. 
+This is the repository for Hilton & Moser et al. (2022) "Acoustic regularities in infant-directed speech and song across cultures". An open-access version of the paper is available at https://www.biorxiv.org/content/10.1101/2020.04.09.032995v5. 
 
 You can find the following here:
 - an R Markdown file that generates the manuscript
