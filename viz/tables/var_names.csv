@@ -1,0 +1,22 @@
+Label,Stub
+Attack Curve Slope,mir_attack_
+Roughness,mir_roughness_
+Tempo,mir_tempo_
+Pule Clarity,mir_pulseclarity_
+Temporal Modulation,tm_peak_hz_
+Temporal Modulation,tm_std_hz_
+Pitch Space,praat_f0travel_
+Pitch Space Travel Rate,praat_f0travel_rate_
+Pitch Space Travel Rate,praat_f0_travel_rate_
+Pitch,praat_f0_
+Pitch Rate,praat_pitch_rate_
+Vowel Space Travel Rate,praat_voweltravel_rate_
+Vowel Space,praat_voweltravel_
+Amplitude Space Travel Rate,praat_intensitytravel_rate_
+Amplitude Space,praat_intensitytravel_
+Amplitude Rate,praat_intensity_rate_
+Amplitude,praat_intensity_
+1st Formant,praat_f1_
+Second Formant,praat_f2_
+File duration,meta_length_
+Concatenated file duration,meta_edit_length_

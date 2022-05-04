@@ -1,0 +1,847 @@
+---
+author: "Courtney B. Hilton"
+date: "21/02/2022"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r include=FALSE}
+full_run <- ifelse(exists("full_run"), full_run, FALSE) #i.e., enabling this to be set by manuscript.rmd, otherwise, just defaulting to false.
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, include = FALSE)
+```
+
+```{r}
+
+pacman::p_load(
+  car,
+  colorspace,
+  countrycode,
+  ggeffects,
+  ggnewscale,
+  ggpubr,
+  ggridges,
+  ggsignif,
+  ggtext,
+  glue,
+  pROC,
+  Hmisc,
+  janitor,
+  knitr,
+  lme4,
+  lmerTest,
+  lsr,
+  magick,
+  grid,
+  multcomp,
+  patchwork,
+  png,
+  rgeos,
+  magrittr,
+  rnaturalearth,
+  rnaturalearthdata,
+  sf,
+  conflicted
+)
+
+# IF this script is being run separately from manuscript.Rmd, then also load these functions:
+if (full_run == FALSE) {
+    pacman::p_load(
+      here, 
+      kableExtra,
+      broom,
+      broom.mixed,
+      scales,
+      skimr,
+      tidyverse
+    )
+}
+
+# finally, make sure there are no namespace conflicts (since packages may have been loaded in different orders)
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("summarise", "dplyr")
+conflict_prefer("lmer", "lmerTest")
+
+source(here("analysis", "functions.R"))
+
+```
+
+```{r data_lists}
+
+# all data in this .rmd is stored in one of these lists
+# various intermediate transformations of the data
+data <- list()
+
+# stats for the following levels:
+participant <- list()
+item <- list()
+task <- list()
+
+```
+
+```{r load_data}
+
+##########################
+# load preprocessed data #
+##########################
+
+trial_data <- read_csv(here("results", "listener-experiment.csv.gz"),
+                       col_types = cols(.default = "c")) %>%
+  mutate(across(c(user_id,duration,correct,rt,trial_index,sung, infdir,age,inf_guess,infant,adult,english, first_trial, trial_num),
+                as.numeric))
+
+# loading info from preprocessing.R (e.g., exclusions etc)
+load(here("results", "user_info.RData"))
+user_info$recording_pre <- n_distinct(trial_data$stimulus)
+
+######################################
+# extract practice trial performance #
+######################################
+
+prac_trial <- trial_data %>% 
+  filter(
+    stimulus %in% c("TOR47A", "WEL10C")
+  ) %>%
+  group_by(user_id, stimulus) %>% 
+  mutate(
+    row = row_number()
+  ) %>%
+  ungroup() %>% 
+  count(row) %>% 
+  mutate(pct = n / sum(n))
+
+task$prac$first <- prac_trial %>% filter(row == 1) %>% pull(pct) # accuracy for first-attempts in practice trials
+task$prac$second <- prac_trial %>% filter(row == 2) %>% pull(pct) + task$prac$first # accuracy for second attempt(s)
+
+###############################################
+# remove confounded stimuli & practise trials #
+###############################################
+
+trial_data <- trial_data %>%
+  filter(
+    # removing confounded stimuli
+    infant == 0 & adult == 0,
+    # remove practice trials
+    !stimulus %in% c("TOR47A", "WEL10C")
+  )
+
+
+###############################
+# extract other relevant info #
+###############################
+
+Regions <- c("South America", "South America", "Africa", "Asia", "Africa", "Asia", "South America",
+             "Oceania", "Africa", "Oceania", "South America", "Europe", "South America", "Europe", 
+             "Africa", "South America", "Asia", "Europe", "North America", "North America", "Oceania")
+
+fieldsites <- read_csv(here("data", "fieldsite-list.csv")) %>% 
+  bind_cols(., Region = Regions)
+
+trial_data <- trial_data %>% 
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite")
+
+user_info$n_excluded <- user_info$recording_pre - n_distinct(trial_data$stimulus)
+user_info$completed_post <- trial_data %>% filter(complete == 1) %>% summarise(n = n_distinct(user_id))
+user_info$same_fam <- trial_data %>% filter(audiofam != Family) %>% nrow %>% f
+user_info$diff_fam <- trial_data %>% filter(audiofam != Family) %>% nrow %>% f
+
+# matching the standardized three-letter code to society name
+fieldsite_codes <- data.frame(
+  society = c("Hadza", "Tsimane", "Nyangatom", "Toposa", "Enga", "Afrocolombians","Colombian mestizos", 
+              "Sápara/Achuar", "San Diego", "Quechuan/Aymaran", "Jenu Kurubas", "Wellington", 
+              "Arawak", "Krakow", "Rural Poland", "Beijing", "Toronto", "Tannese Vanuatans","Turku",
+              "Mentawai Islanders","Mbendjele"),
+  fieldsite = c("HAD", "TSI", "NYA", "TOP", "PNG", "ACO", "MES", "SPA", "USD", 
+                "QUE", "JEN", "WEL", "ARA", "KRA", "LIM", "BEJ", "TOR", "VAN",
+                "TUR", "MEN", "MBE"))
+
+```
+
+```{r}
+
+#############################################
+# extract windsorized acoustic feature data #
+#############################################
+
+acoustic <- read_csv(here("results", "acoustics-Winsorized.csv"))
+
+#########################################
+# extract general acoustic feature info #
+#########################################
+
+item$n$recordings <- nrow(acoustic)
+item$n$voices <- acoustic %>% count(id_person) %>% nrow
+item$acoustic_vars <- acoustic %>% select(!matches("(dist)|(num_events)|(idx)")) %>% ncol - 6 # (6 = the non-acoustic variables) # dropped vars = junk
+item$n_10sec_exclude <- item$n$recordings - user_info$recording_pre
+item$non_full <- (410*4) - nrow(acoustic)
+item$non_full_pct <- item$non_full / nrow(acoustic)
+
+item$voc <- read_csv(here("results", "acoustics-Winsorized.csv")) %>%
+  group_by(id_site) %>%
+  summarise(n = n_distinct(id_person)) %>%
+  summarise(med = median(n), min = min(n), max = max(n))
+
+info <- read_csv(here("data", "stimuli-info.csv")) %>%
+    # These 4 vocalists were ambiguously determined as male/female
+    # We went with our intuition here, but either way, doesn't change end result
+    mutate(voc_gender = case_when(
+      grepl("TSI05", id) ~ "M",
+      grepl("TSI07", id) ~ "M",
+      grepl("TSI11", id) ~ "M",
+      grepl("TSI13", id) ~ "F",
+      TRUE ~ Gender
+    ))
+
+################################
+# preprocess acoustic features #
+################################
+
+acoustic <- acoustic %>%
+  rename("infdir" = "infantdir") %>%
+  mutate(id_song = infdir * song) %>%
+  relocate(id_song, .after = "song") %>%
+  # Even-numbered participants = exploratory; odd = confirmatory
+  mutate(samp = ifelse(as.numeric(substr(id, 4, 5))%%2 == 0, "exp", "conf")) %>%
+  # keep only voices with all 4 vocalization types
+  group_by(id_person) %>% filter(n() == 4) %>% ungroup() %>%
+  # removing dodgy variables
+  select(!matches("(mean)|(std)|(quart)|(_1q)|(_3q)|(range)|(dist)|(max)|(min)|(num_events)|(default)|(travel)"),
+         praat_voweltravel_median, praat_voweltravel_IQR, praat_voweltravel_rate_median, praat_voweltravel_rate_IQR) %>%
+  drop_na() %>%
+  # log-transform skewed variables
+  mutate(across(matches("(praat_voweltravel_rate_.*)|(mir_pulseclarity)|(mir_roughness_.*)"), ~ log(.x + 1))) %>% 
+  mutate(across(matches("(mir_roughness_.*)"), ~ log(.x))) %>% 
+  # updating variable names to reflect this
+  rename_with(~ paste0(.x, "_log"), matches("(mir_roughness_.*)|(praat_voweltravel_rate_.*)|(mir_pulseclarity)")) %>% 
+  # z-scoring within each voice
+  # this is both necessary for PCA, but also helps the mixed-models converge fully
+  # group_by(id_person) %>%
+  # de-mean then scale (within voices)
+  mutate(across(matches("(praat_)|(mir_)|(tm_)|(npvi_)"), ~ scale(.x))) %>%
+  ungroup() %>%
+  mutate(song = ifelse(song == 1, "song", "speech"),
+         infdir = ifelse(infdir == 1, "infant", "adult"),
+         voc_type = str_sub(id, 6,6))
+
+item$acoustic_vars_post <- acoustic %>% ncol - 6
+
+```
+
+```{r general_stats}
+
+##################################################################
+# compute variety of summary stats about the naive-listener data #
+##################################################################
+
+### Temp variables for computing stats ###
+# Participant age and gender
+data$participants <- trial_data %>%
+  group_by(user_id) %>%
+  summarise(across(c(gender, age, country, language, langOtherWhich, hearingImp, workspace, headphone, income, education, race, latino), unique),
+            gender = if_else(is.na(gender), "not_reported", gender),
+            accuracy = mean(correct),
+            med_rt = median(rt))
+
+# Observations per song
+data$song_count <- trial_data %>%
+  count(stimulus)
+
+### Compute stats and store in list ###
+# Participant-level stats
+
+participant$n$total <- n_distinct(data$participants$user_id)
+participant$n$countries <- n_distinct(data$participants$country)
+participant$n$languages <- union(unique(data$participants$language), unique(data$participants$langOtherWhich)) %>% length()
+participant$n$languages_1st <- n_distinct(data$participants %>% drop_na(language) %>% pull(language))
+participant$n$languages_2nd <- n_distinct(data$participants %>% drop_na(langOtherWhich) %>% pull(langOtherWhich))
+participant$n$languages_2nd_unique <- participant$n$languages - participant$n$languages_1st
+
+# N of Male, Female, Other, and Not reported
+for (gend in unique(data$participants$gender)) {
+  participant$n$gender[[{{gend}}]] <- nrow(filter(data$participants, gender == {{gend}}))
+}
+
+## additional demographic info for US participants
+participant$income <- data$participants %>% drop_na(income) %>% filter(income != "I'd prefer not to say") %>% janitor::tabyl(income)
+participant$education <- data$participants %>% drop_na(education) %>% filter(education != "Other (specify on next page)") %>% janitor::tabyl(education)
+participant$race <- data$participants %>% drop_na(race) %>% filter(race != "Prefer not to say") %>% janitor::tabyl(race)
+participant$latino <- data$participants %>% drop_na(latino) %>% filter(latino != "Prefer not to say") %>% janitor::tabyl(latino)
+
+participant$age$min <- min(trial_data$age, na.rm = TRUE)
+participant$age$max <- max(trial_data$age, na.rm = TRUE)
+participant$age$median <- median(data$participants$age, na.rm = TRUE)
+participant$age$IQR_low <- quantile(data$participants$age, na.rm = TRUE, 1/4)
+participant$age$IQR_high <- quantile(data$participants$age, na.rm = TRUE, 3/4)
+
+# Item-level stats
+item$ratings$n$total <- nrow(trial_data)
+item$ratings$n$IDsong <- nrow(filter(trial_data, voc_type == "A"))
+item$ratings$n$IDspeech <- nrow(filter(trial_data, voc_type == "B"))
+item$ratings$n$ADsong <- nrow(filter(trial_data, voc_type == "C"))
+item$ratings$n$ADspeech <- nrow(filter(trial_data, voc_type == "D"))
+item$ratings$songwise$median <- median(data$song_count$n)
+item$ratings$songwise$min <- min(data$song_count$n)
+item$ratings$songwise$max <- max(data$song_count$n)
+item$ratings$songwise$IQR_low <- quantile(data$song_count$n, 1/4)
+item$ratings$songwise$IQR_high <- quantile(data$song_count$n, 3/4)
+item$ratings$sitewise <- trial_data %>% group_by(fieldsite) %>%
+  summarise(n = n()) %>%
+  summarise(median = median(n), IQR_low = quantile(n, 1/4), IQR_high = quantile(n, 3/4))
+
+item$rating$per_voc <- trial_data %>% add_count(stimulus) %>% summarise(med = median(n), IQR_low = quantile(n, 1/4), IQR_high = quantile(n, 3/4))
+
+
+item$prop_inf_song <- trial_data %>% filter(sung == 1) %>% summarise(avg_inf = mean(infdir) %>% percent)
+item$prop_inf_song_guess <- trial_data %>% filter(sung == 1) %>% summarise(avg_inf = mean(inf_guess) %>% percent)
+item$prop_adult_speech <- trial_data %>% filter(sung == 0) %>% summarise(avg_inf = (1 - mean(infdir)) %>% percent)
+item$prop_adult_speech_guess <- trial_data %>% filter(sung == 0) %>% summarise(avg_inf = (1 - mean(inf_guess)) %>% percent)
+
+### Format output
+participant$n %<>% format_list(.)
+participant$age %<>% format_list(.)
+
+item$ratings$n %<>% format_list(.)
+item$songwise$n %<>% format_list(.)
+
+```
+
+```{r acc}
+
+######################################################################
+# This chunk computes accuracy scores from the listener experiment and 
+# fits mixed effects models using these accuracy scores. 
+######################################################################
+
+mod <- lmer(correct ~ (1|fieldsite), trial_data)
+task$acc$all$mod <- mod %>% tidy(conf.int = TRUE, conf.level = .95)
+task$acc$all$test <- linearHypothesis(mod, "(Intercept) = .5") %>% tidy %>% slice(2)
+task$acc$all$site <- extract_site_estimates(mod, "(Intercept)", 0.5) %>% filter(above_zero == 0) %>% nrow
+
+# Note: I also tried fitting models with random intercepts for voice or stimulus... these
+# returned highly similar estimates, but took 5-10 minutes to fit the model.. so going with simpler version here.
+mod <- trial_data %>%
+  group_by(stimulus, fieldsite, voc_type, region) %>%
+  summarise(avg = mean(correct), .groups = "drop") %>%
+  lmer(avg ~ voc_type + 0 + (0 + voc_type|fieldsite) + (0 + voc_type|region), .)
+task$acc$voc$mod <- mod %>% tidy(conf.int = TRUE, conf.level = .95) %>% filter(effect == "fixed") %>% split(.$term)
+task$acc$voc$A <- linearHypothesis(mod, "voc_typeA = .5") %>% tidy %>% slice(2)
+task$acc$voc$B <- linearHypothesis(mod, "voc_typeB = .5") %>% tidy %>% slice(2)
+task$acc$voc$C <- linearHypothesis(mod, "voc_typeC = .5") %>% tidy %>% slice(2)
+task$acc$voc$D <- linearHypothesis(mod, "voc_typeD = .5") %>% tidy %>% slice(2)
+
+task$acc$site$A <- extract_site_estimates(mod, "voc_typeA", 0.5) %>% filter(above_zero == 1) %>% nrow
+task$acc$site$B <- extract_site_estimates(mod, "voc_typeB", 0.5) %>% filter(above_zero == 1) %>% nrow
+task$acc$site$C <- extract_site_estimates(mod, "voc_typeC", 0.5) %>% filter(above_zero == 1) %>% nrow
+task$acc$site$D <- extract_site_estimates(mod, "voc_typeD", 0.5) %>% filter(above_zero == 1) %>% nrow
+
+task$acc$age <- lmer(correct ~ age + voc_type + (1|fieldsite), trial_data) %>% tidy %>%
+  filter(term == "age") %>%
+  pull(estimate) %>% percent(accuracy = 0.01)
+
+# this is the model used to estimate the variation explained by country, age, language, and gender
+if (full_run == TRUE) {
+  mod <- lmer(correct ~ age + gender + (1|fieldsite) + (1|country) + (1|language), trial_data) %>% tidy(conf.int = TRUE)
+  save(mod, file = here("results", "random_participant_mod.RData"))
+} else {
+  load(here("results", "random_participant_mod.RData"))
+}
+
+overall_acc <- mod %>% filter(term == "(Intercept)") %>% pull(estimate)
+task$acc$randoms <- mod %>%
+  filter(group %in% c("country", "language")) %>%
+  mutate(cv = estimate / overall_acc) %>% 
+  split(.$group)
+
+# if (full_run == TRUE) {
+#   mod <- lmer(inf_guess ~ voc_type + 0 + (0 + voc_type|fieldsite) + (1|id), trial_data)
+#   save(mod, file = here("results", "inf_guess_model.RData"))
+# } else {
+#   load(here("results", "inf_guess_model.RData"))
+# }
+# 
+# task$inf$mod <- mod %>% tidy(conf.int = TRUE) %>% filter(effect == "fixed") %>% split(.$term)
+# task$inf$speech <- linearHypothesis(mod, "voc_typeB - voc_typeD = 0") %>% tidy %>% slice(2)
+# task$inf$song <- linearHypothesis(mod, "voc_typeA - voc_typeC = 0") %>% tidy %>% slice(2)
+
+# trial practice effect
+task$practise_mod <- lmer(correct ~ trial_num + voc_type + (1|fieldsite), data = trial_data)
+task$prac_effect <- task$practise_mod %>% tidy() %>% filter(term == "trial_num")
+
+```
+
+```{r d_prime}
+
+########################################################
+# Compute d' for each voice (speech & song separately) #
+########################################################
+
+# overall
+task$d$voc <- extract_d(trial_data)
+
+# broken down by language similarity
+task$d$lang <- extract_d(trial_data %>% mutate(lang_similarity = case_when(
+    language == audiolang | (!is.na(langOtherWhich) & langOtherWhich == audiolang) ~ "same_lang",
+    Family == audiofam | (!is.na(Family2) & Family2 == audiofam) ~ "same_fam",
+    TRUE ~ "unrelated"
+  )), lang_similarity)
+
+# average d' for each fieldsite
+task$d$fieldsites <- task$d$voc %>% 
+  mutate(fieldsite = str_sub(id, 1,3)) %>% 
+  group_by(fieldsite, sung) %>% 
+  summarise(
+    avg_d = mean(d_prime),
+    .groups = "drop"
+  )
+
+#######################################
+# Mixed-effect modelling of d' scores #
+#######################################
+
+# 1. overall
+task$d$mod <- task$d$voc %>% 
+  mutate(fieldsite = str_sub(id, 1,3)) %>%
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite") %>% 
+  lmer(d_prime ~ 0 + sung + (0 + sung|region/fieldsite), .)
+# NOTE: this model (and other similar ones) ends up with a singular fit, as a result of the perfect correlation between 
+# speech and song d' estimates for the world-region random coefficients. We do not think this is
+# an issue for the following reasons:
+#  1. The model converges successfully
+#  2. general model checks look good (see `performance::model_check(task$d$mod)`)
+#  3. It makes sense that the correlation for this term should be high and that 
+#     there was likely not enough fieldsites per world-region for the model to find
+#     a fit that was just below 1 (e.g., the correlation term for fieldsites is 0.925)
+#  4. We do not directly interpret the world-region random-effect estimates, so some small
+#    uncertainty in the correlation parameter is of little concern.
+#  5. The correlation term has zero influence on the other random-effect estimates in the model
+#     i.e., it does not affect the fieldsite-level estimates, which we care more about.
+
+task$d$mod_output <- task$d$mod %>% tidy(conf.int = TRUE, conf.level = .95) %>% filter(effect == "fixed") %>% split(.$term)
+
+# 2. testing effect of language similarity
+task$d$mod_lang <- task$d$lang %>%
+  mutate(fieldsite = str_sub(id, 1,3)) %>%
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite") %>% 
+  mutate(lang_similarity = factor(lang_similarity, levels = c("unrelated", "same_fam", "same_lang"))) %>% 
+  lmer(d_prime ~ sung + 0 + lang_similarity + (0 + sung|region/fieldsite), .)
+
+task$d$marginal_lang <- ggemmeans(task$d$mod_lang, c("sung", "lang_similarity")) %>% tibble() %>% mutate(lab = paste0(x,group)) %>% split(.$lab)
+
+```
+
+
+```{r replications}
+
+##########################################################
+# 1. replicating without excluding confounded recordings #
+##########################################################
+
+trial_data_full <- read_csv(here("results", "listener-experiment.csv.gz"),
+                       col_types = cols(.default = "c")) %>%
+  mutate(across(c(user_id,duration,correct,rt,trial_index,sung, infdir,age,inf_guess,infant,adult,english, first_trial, trial_num),
+                as.numeric)) %>% 
+  filter(
+    # remove practice trials
+    !stimulus %in% c("TOR47A", "WEL10C")
+  )
+
+task$d$mod_confounds <- extract_d(trial_data_full) %>% 
+  mutate(fieldsite = str_sub(id, 1,3)) %>%
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite") %>% 
+  lmer(d_prime ~ sung + 0 + (0 + sung|region/fieldsite), .) %>% 
+  tidy(conf.int = TRUE, conf.level = .95) %>% filter(effect == "fixed") %>% split(.$term)
+
+###############################################
+# 2. replicating excluding english recordings #
+###############################################
+
+task$d$mod_no_english <- extract_d(trial_data %>% 
+  filter(stimulus %in% extract_complete_ids(trial_data),
+         english == 0)) %>% 
+  mutate(fieldsite = str_sub(id, 1,3)) %>%
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite") %>% 
+  lmer(d_prime ~ sung + 0 + (0 + sung|region/fieldsite), .) %>% 
+  tidy(conf.int = TRUE, conf.level = .95) %>% filter(effect == "fixed") %>% split(.$term)
+
+```
+
+
+```{r corpus_info_tests}
+
+###########################################################################
+# This chunk tests for relationships betwen naive listener performance and 
+# information about each society (e.g., it's population size).
+###########################################################################
+
+# 1. Wrangle data
+corpus_info_data <- read_csv(here("data", "fieldsite-metadata.csv"), na = " ") %>% tibble %>%
+  select(
+    fieldsite,
+    pop = `Population of Residential Community`,
+    ID_speech_freq = `Frequency of Infant-Directed Speech`,
+    ID_song_freq = `Frequency of Infant-directed Song`,
+    dist = `Distance to Closest Urban Center (km)`,
+    child = `Average Number of Children Born per Woman`
+    ) %>%
+  mutate(
+    pop = c(152,35,155,250,21500000, 2000, 260, 771069, 6720, 186000,
+            3300000, 5900000, 6000, 500, 210400, 350, 150, 200, 200, 1000, 470000),
+    pop_rank = rank(pop, ties.method = "random"),
+    child = parse_number(child)
+  ) %>%
+  left_join(., task$d$fieldsites %>% filter(sung == "song") %>% select(fieldsite, avg_d), by = "fieldsite") %>%
+  rename(song_d = avg_d) %>%
+  left_join(., task$d$fieldsites %>% filter(sung == "speech") %>% select(fieldsite, avg_d), by = "fieldsite") %>%
+  rename(speech_d = avg_d) %>%
+  mutate(across(contains("freq"), ~ parse_number(.x)))
+
+# 2. Test for relationship with population rank
+task$survey$pop$speech <- cor.test(corpus_info_data$pop_rank, corpus_info_data$speech_d, method = "kendall") %>% tidy
+task$survey$pop$song <- cor.test(corpus_info_data$pop_rank, corpus_info_data$song_d, method = "kendall") %>% tidy
+
+# 3. Test for relationship with ID vocalization frequency
+task$survey$freq$speech <- cor.test(corpus_info_data$speech_d, corpus_info_data$ID_speech_freq) %>% tidy
+task$survey$freq$song <- cor.test(corpus_info_data$song_d, corpus_info_data$ID_song_freq) %>% tidy
+
+# 4. Test for relationship with site distance to city
+task$survey$dist$speech <- cor.test(corpus_info_data$dist, corpus_info_data$speech_d) %>% tidy
+task$survey$dist$song <- cor.test(corpus_info_data$dist, corpus_info_data$song_d) %>% tidy
+
+# 5. Test for relationship with children per
+task$survey$child$speech <- cor.test(corpus_info_data$child, corpus_info_data$song_d) %>% tidy
+task$survey$child$song <- cor.test(corpus_info_data$child, corpus_info_data$speech_d) %>% tidy
+
+```
+
+```{r fig3_processing}
+
+############################################################
+# This chunk runs the preregistered exploratory-confirmatory 
+# tests on the acoustic data.
+############################################################
+
+if (full_run == TRUE) {
+  acoustic_tests <- list()
+  
+  # defining hypothesis matrix
+  linear_tests <- c(
+    1,0,-1,0, # ID song vs AD song
+    0,1,0,-1 # ID speech vs AD speech
+  ) %>%
+    matrix(., ncol = 4, byrow = TRUE)
+  comparisons <- c("song_features", "speech_features")
+  
+  for (samp_x in c("exp", "conf")) {
+    for (feature in select(acoustic, matches("(praat_)|(mir_)|(tm_)|(npvi_)")) %>% names) {
+      mod_formula <- reformulate(c("0 + voc_type + (0 + voc_type|id_site) + (1|id_person)"), response = feature)
+      # extracts p-value for the infant-directed term
+      mod <- acoustic %>%
+        filter(samp == samp_x) %>%
+        lme4::lmer(mod_formula, data = .)
+      
+      for (comp_x in seq_along(comparisons)) {
+        acoustic_tests[[samp_x]][[comparisons[comp_x]]] <- glht(mod,
+                                                                linfct = linear_tests[comp_x,] %>% as.matrix() %>% t(),
+                                                                # if we have hypotheses, use directional tests, if not use two-sided
+                                                                alternative = "two.sided",
+                                                                test = adjusted(type = "none")) %>% tidy %>%
+          mutate(feat = feature, keep = ifelse(adj.p.value < .05, 1,0)) %>%
+          bind_rows(acoustic_tests[[samp_x]][[comparisons[comp_x]]], .)
+      }
+    }
+  }
+  
+  selected_features <- list()
+  
+  for (comp_x in comparisons) {
+    selected_features[[comp_x]] <- intersect(acoustic_tests$exp[[comp_x]] %>% filter(keep == 1) %>% pull(feat),
+                                             acoustic_tests$conf[[comp_x]] %>% filter(keep == 1) %>% pull(feat))
+  }
+  
+  # all features that are significant across exp and conf
+  selected_features$all <- unique(c(selected_features$song, selected_features$speech))
+  
+  final <- list()
+  
+  for (feature in selected_features$all) {
+    mod_formula <- reformulate(c("0 + voc_type + (0 + voc_type|id_site) + (1|id_person)"), response = feature)
+      mod <- lme4::lmer(mod_formula, data = acoustic)
+      final$full_mods[[feature]] <- mod
+    for (comp_x in seq_along(comparisons)) {
+      final[[comparisons[comp_x]]] <- glht(mod,
+                                           linfct = linear_tests[comp_x,] %>% as.matrix() %>% t(),
+                                           # if we have hypotheses, use directional tests, if not use two-sided
+                                           alternative = "two.sided",
+                                           test = adjusted(type = "none")) %>% tidy %>%
+        mutate(feature = feature,
+               comparison = comparisons[comp_x]) %>%
+        bind_rows(final[[comparisons[comp_x]]], .)
+    }
+  }
+  
+  final$all <- bind_rows(final$song, final$speech) %>%
+    select(feature, adj.p.value, comparison) %>%
+    pivot_wider(names_from = comparison, values_from = adj.p.value)
+  
+  feature.vars <- final$all %>% pull(feature)
+  save(feature.vars, file = here("results", "exp_conf_features.RData"))
+  
+  final$plot <- acoustic %>%
+    select(c(1:7), selected_features$all) %>%
+    pivot_longer(names_to = "feat", values_to = "z", cols = matches("(praat_)|(mir_)|(tm_)|(npvi_)")) %>%
+    left_join(., final$all, by = c("feat" = "feature")) %>%
+    mutate(
+      across(c(feat, infdir, song), as_factor),
+      infdir = factor(infdir, levels = c("infant", "adult") %>% rev)
+    )
+  
+  save(final, file = here("results", "expl_conf_output.RData"))
+} else {
+  load(here("results", "expl_conf_output.RData"))
+}
+
+```
+
+```{r PCA}
+
+#####################################
+# PCA on full 94 acoustic variables #
+#####################################
+
+acoustic2 <- read_csv(here("results", "acoustics-Winsorized.csv")) %>%
+  rename("infdir" = "infantdir") %>%
+  mutate(id_song = infdir * song) %>%
+  relocate(id_song, .after = "song") %>%
+  # keep only voices with all 4 vocalization types
+  group_by(id_person) %>% filter(n() == 4) %>% ungroup() %>%
+  # removing dodgy variables
+  select(!matches("(dist)|(num_events)|(idx)")) %>%
+  drop_na() %>%
+  # z-scoring within each voice
+  # this is both necessary for PCA, but also helps the mixed-models converge fully
+  group_by(id_person) %>%
+  # de-mean then scale (within voices)
+  mutate(across(matches("(praat_)|(mir_)|(tm_)|(npvi_)"), ~ (.x - mean(.x)) %>% scale)) %>%
+  #across(matches("(praat_)|(mir_)|(tm_)|(npvi_)"), scale)
+  ungroup() %>%
+  mutate(song = ifelse(song == 1, "song", "speech"),
+         infdir = ifelse(infdir == 1, "infant", "adult"))
+
+# Compute PCA
+PCA2 <- acoustic2 %>%
+  select(matches("(praat_)|(mir_)|(tm_)|(npvi_)")) %>%
+  drop_na() %>%
+  prcomp()
+
+```
+
+
+```{r LASSO-stuff}
+
+################################################################
+# This chunk computes Receiver Operator Characteristic metrics #
+# (% AUC) for both the LASSO models and the naive listeners.   #
+################################################################
+
+load(here("results", "lasso_results.Rdata"))
+
+################################################
+# 1. structure data so ready for computing AUC #
+################################################
+
+song_inferences <- trial_data %>%
+  filter(sung == 1) %>%
+  group_by(stimulus, fieldsite) %>%
+  summarise(prob = mean(inf_guess),
+            voc_type = unique(voc_type)) %>%
+  mutate(inf_dir = ifelse(voc_type == "A", 1, 0))
+
+speech_inferences <- trial_data %>%
+  filter(sung == 0) %>%
+  group_by(stimulus, fieldsite) %>%
+  summarise(prob = mean(inf_guess),
+            voc_type = unique(voc_type)) %>%
+  mutate(inf_dir = ifelse(voc_type == "B", 1, 0))
+
+song_preds <- song_LASSO$lasso_predictions %>%
+  mutate(inf_dir = ifelse(actual_type == "infant_song", 1, 0))
+speech_preds <- speech_LASSO$lasso_predictions %>%
+  mutate(inf_dir = ifelse(actual_type == "infant_speech", 1, 0))
+
+#########################
+# 2. compute ROC curves #
+#########################
+
+rocs <- list()
+rocs$all$human_song <- roc(song_inferences$inf_dir, song_inferences$prob, percent=TRUE, ci=TRUE, quiet = TRUE)
+rocs$all$lasso_song <- roc(song_preds$inf_dir, song_preds$.pred_infant_song, percent=TRUE, ci=TRUE, quiet = TRUE)
+rocs$all$human_speech <- roc(speech_inferences$inf_dir, speech_inferences$prob, percent=TRUE, ci=TRUE, quiet = TRUE)
+rocs$all$lasso_speech <- roc(speech_preds$inf_dir, speech_preds$.pred_infant_speech, percent=TRUE, ci=TRUE, quiet = TRUE)
+
+#############################################
+# 3. compute AUC over fieldsites for humans #
+#############################################
+
+rocs$fieldsite$song <- song_inferences %>%
+  group_by(fieldsite) %>%
+  filter(
+    any(voc_type == "A") & any(voc_type == "C")
+  ) %>% 
+  summarise(auc = roc(inf_dir, prob, percent=TRUE, quiet = TRUE)$auc %>% as.numeric, .groups = "drop") %>%
+  mutate(rank = rank(desc(auc))) %>%
+  right_join(., song_LASSO$mod_auc$sites %>% rename(mod_auc = auc), by = c("fieldsite" = "id_site"))
+
+rocs$fieldsite$speech <- speech_inferences %>%
+  group_by(fieldsite) %>%
+  filter(
+    any(voc_type == "B") & any(voc_type == "D")
+  ) %>% 
+  summarise(auc = roc(inf_dir, prob, percent=TRUE, quiet = TRUE)$auc %>% as.numeric, .groups = "drop") %>%
+  mutate(rank = rank(desc(auc))) %>%
+  right_join(., speech_LASSO$mod_auc$sites %>% rename(mod_auc = auc), by = c("fieldsite" = "id_site"))
+
+###################################################
+# 4. test correlations between LASSO & human AUCs #
+###################################################
+
+rocs$fieldsite$cor$speech <- cor.test(rocs$fieldsite$speech$auc, rocs$fieldsite$speech$mod_auc, alternative = "greater") %>% tidy
+rocs$fieldsite$cor$song <- cor.test(rocs$fieldsite$song$auc, rocs$fieldsite$song$mod_auc, alternative = "greater") %>% tidy
+
+```
+
+```{r feature rankings}
+
+#################################################################
+# This chunk tests whether there is a relationship between
+# 1. the LASSO variable importance scores
+# and 
+# 2. how acoustically salient each feature is in the actual corpus
+#################################################################
+
+load(here("results", "human_lasso.RData"))
+
+cor_tests <- list()
+cor_tests$speech <- relation_tester(speech_mod, "speech")
+cor_tests$song <- relation_tester(song_mod, "song")
+
+# pull R2 of models
+lassos <- list()
+lassos$speech <- lm(perc_inf ~ .pred, data = speech_mod$predictions) %>% glance
+lassos$song <- lm(perc_inf ~ .pred, data = song_mod$predictions) %>% glance
+
+```
+
+
+```{r infant_present}
+
+###############################################################
+# This chunk tests the effect of an infant is present on naive
+# listener accuracy. 
+###############################################################
+
+if (full_run == TRUE) {
+  corpus_info <- read_csv(here("data", "stimuli-rawMetadata.csv")) %>% 
+    select(vocalist = `What is this subject's unique identifier?`, 
+           inf_present = `Is an infant present, as specified by the researcher?`
+    )
+  
+  test <- trial_data %>%
+    left_join(., corpus_info, by = c("id" = "vocalist")) %>%
+    drop_na(inf_present) %>%
+    mutate(infdir = as_factor(infdir))
+  
+  mod <- lmer(correct ~ inf_present:voc_type + voc_type + 0 + (0 + voc_type|fieldsite), test)
+  mod2 <- lmer(inf_guess ~ inf_present:infdir + voc_type + 0 + (0 + voc_type|fieldsite), test)
+  
+  save(mod, mod2, file = here("results", "inf_present_mods.RData"))
+} else {
+  load(here("results", "inf_present_mods.RData"))
+}
+
+inf_present <- list()
+inf_present$mod <- mod %>% tidy(conf.int = TRUE) %>% filter(effect == "fixed") %>% mutate(term = str_replace(term, ":", "")) %>% split(.$term)
+inf_present$inf_compare <- linearHypothesis(mod2, "inf_presentNo:infdir0 - inf_presentNo:infdir1 = 0") %>% tidy %>% slice(2)
+
+```
+
+```{r demographic-tests}
+
+# Note: this is only for US participants (since we were required by NIH to survey these items for US participants)
+
+if (full_run == TRUE) {
+  # 1. Income
+mod <- trial_data %>%
+  drop_na(income) %>%
+  filter(income != "I'd prefer not to say") %>% 
+  mutate(
+    income_order = case_when(
+      income == "Under $10,000" ~ 1,
+      income == "$10,000 to $19,999" ~ 2,
+      income == "$20,000 to $29,999" ~ 3,
+      income == "$30,000 to $39,999" ~ 4, 
+      income == "$40,000 to $49,999" ~ 5, 
+      income == "$50,000 to $74,999" ~ 6, 
+      income == "$75,000 to $99,999" ~ 7, 
+      income == "$100,000 to $150,000" ~ 8, 
+      income == "Over $150,000" ~ 9
+    ),
+    # scale to help model fitting
+    income_order = scale(income_order)
+  ) %>%
+  lmer(correct ~ income_order + voc_type + (1|id), .)
+task$demo$income$anova <- mod %>% anova() %>% tidy() %>% mutate(pct_explained = sumsq / sum(sumsq)) %>% split(.$term)
+task$demo$income$mod <- mod %>% tidy %>% split(.$term)
+
+# 2. Education
+mod <- trial_data %>%
+  drop_na(education) %>%
+  filter(education != "Other (specify on next page)") %>% 
+  mutate(
+    education_order = case_when(
+      education == "Some elementary/middle school<br>(primary school)" ~ 1,
+      education == "Completed elementary/middle school<br>(primary school)" ~ 2,
+      education == "Some high school" ~ 3,
+      education == "Completed high school<br>(secondary school)" ~ 4, 
+      education == "Some undergrad<br>(higher education)" ~ 5, 
+      education == "Completed undergrad degree<br>(~3-5 years higher education)" ~ 6, 
+      education == "Some graduate school" ~ 7, 
+      education == "Completed graduate school" ~ 8
+    ),
+    # scale to help model fitting
+    education_order = scale(education_order)
+  ) %>%
+  lmer(correct ~ education_order + voc_type + (1|id), .)
+task$demo$education$anova <- mod %>% anova() %>% tidy() %>% mutate(pct_explained = sumsq / sum(sumsq)) %>% split(.$term)
+task$demo$education$mod <- mod %>% tidy %>% split(.$term)
+
+# 3. Ethnicity
+mod <- lmer(correct ~ race + voc_type + (1|id), trial_data %>% drop_na(race) %>% filter(race != "Prefer not to say"))
+task$demo$race$anova <- mod %>% anova() %>% tidy() %>% mutate(pct_explained = sumsq / sum(sumsq)) %>% split(.$term)
+task$demo$race$mod <- mod %>% tidy %>% split(.$term)
+
+# Hispanic/not-hispanic
+mod <- lmer(correct ~ latino + voc_type + (1|id), trial_data %>% drop_na(latino) %>% filter(latino != "Prefer not to say"))
+task$demo$latino$anova <- mod %>% anova() %>% tidy() %>% mutate(pct_explained = sumsq / sum(sumsq)) %>% split(.$term)
+task$demo$latino$mod <- mod %>% tidy %>% split(.$term)
+
+demo_mods <- task$demo
+
+save(demo_mods, file = here("results", "demographic_models.RData"))
+} else {
+  load(here("results", "demographic_models.RData"))
+  task$demo <- demo_mods
+}
+
+```
+
+```{r}
+
+save(
+data, participant, item, mod, task, rocs, PCA2, acoustic, acoustic2, cor_tests, lassos, inf_present, info, 
+trial_data, user_info, fieldsite_codes, final, extract_site_estimates, fieldsites,
+file = here("results", "analyses.RData")
+)
+
+```
+

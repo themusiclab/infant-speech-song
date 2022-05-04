@@ -1,0 +1,1189 @@
+---
+bibliography: citations.bib
+csl: nature.csl
+header-includes:
+- \usepackage{ragged2e}
+- \usepackage{caption}
+- \usepackage{longtable}
+- \usepackage[labelformat = empty]{caption}
+- \usepackage{afterpage}
+- \usepackage{fontenc}
+- \usepackage{soul}
+- \usepackage{xcolor}
+- \usepackage[symbol]{footmisc}
+- \definecolor{bleu}{HTML}{2200cc}
+- \renewcommand{\thefootnote}{\fnsymbol{footnote}}
+notes-after-punctuation: no
+urlcolor: bleu
+linkcolor: bleu
+output:
+  pdf_document:
+    number_sections: true
+  html_document:
+    df_print: paged
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+```{r chunk_knit_settings, include=F}
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+options(scipen = 999) # disable scientific notation
+
+```
+
+```{r load_libraries_and_functions}
+
+if(!require(pacman)) {
+message("installing the 'pacman' package")
+install.packages("pacman")
+}
+
+library(pacman)
+p_load(
+  here, 
+  kableExtra,
+  lme4,
+  broom,
+  broom.mixed,
+  scales,
+  skimr,
+  tidyverse
+)
+
+### HELPER FUNCTIONS FOR PIPING IN OUTPUTS TO MAIN TEXT ###
+
+# Formats output lists for use in manuscript, data_list = list of outputs
+# sets outputs as text + with thousand mark commas (e.g., 100,000 instead of 100000)
+format_list <- function(data_list) {
+  lapply(data_list, format, nsmall=0, big.mark = ",")
+}
+
+# rounds to 1 decimal place and adds percent sign
+p <- function(num) {percent(num, accuracy=.1)}
+
+# rounds to 2 decimal places
+r2 <- function(num) {format(round(num, 2), nsmall = 2)}
+
+# format p-values
+fp <- function(num) {
+  if (num < .0001) {
+    return("< 0.0001")
+  } else if (num < .001) {
+    return("< 0.001")
+  } else if (num < .01) {
+    return(paste0("= ", round(num, digits = 3)))
+  } else {
+    return(paste0("= ", round(num, digits = 2)))
+  }
+}
+
+f <- function(num) {format(num, big.mark = ",")}
+
+```
+
+```{r}
+####################################################################
+# This manuscript contains computations that take a long time to run
+# For convenience, these computations are parameterized such that
+# they are not run each time the manuscript is knitted by default
+# and instead just load the last saved run.
+# The same is true for figures, which do not need to be regenerated
+# each time the manuscript is knitted.
+# If you want to regenerate anything in your knit, set full_run
+# below to TRUE. Otherwise, do nothing.
+####################################################################
+
+full_run <- FALSE
+
+if (full_run == TRUE) {
+  source(here("analysis", "lasso.R"))
+  knitr::knit(here("analysis", "analyses.Rmd"), quiet = TRUE)
+  knitr::knit(here("viz", "figures.Rmd"), quiet = TRUE)
+}
+
+load(here("results", "analyses.RData"))
+load(here("results", "lasso_results.Rdata"))
+load(here("results", "human_lasso.RData"))
+
+```
+
+\raggedright
+\LARGE
+\textbf{Acoustic regularities in infant-directed speech and song across cultures}
+
+\vspace{0.1in}
+
+\justifying
+\footnotesize
+Courtney B. Hilton$^{1,\wedge,\ast}$, Cody J. Moser$^{1,2,\wedge,\ast}$, Mila Bertolo$^{1}$, Harry Lee-Rubin^1^, Dorsa Amir^3^, Constance M. Bainbridge^1,4^, Jan Simson^1,5^, Dean Knox^6^, Luke Glowacki^7^, Elias Alemu^8^, Andrzej Galbarczyk^9^, Grazyna Jasienska^9^, Cody T. Ross^10^, Mary Beth Neff^11,12^, Alia Martin^11^, Laura K. Cirelli^13,14^, Sandra E. Trehub^14^, Jinqi Song^15^, Minju Kim^16^, Adena Schachner^16^, Tom A. Vardy^17^, Quentin D. Atkinson^17,18^, Amanda Salenius^19^, Jannik Andelin^19^, Jan Antfolk^19^, Purnima Madhivanan^20,21,22,23^, Anand Siddaiah^23^, Caitlyn D. Placek^24^, Gul Deniz Salali^25^, Sarai Keestra^25^, Manvir Singh^26,27^, Scott A. Collins^28^, John Q. Patton^29^, Camila Scaff^30^, Jonathan Stieglitz^27,31^, Silvia Ccari Cutipa^32^, Cristina Moya^33,34^, Rohan R. Sagar^35,36^, Mariamu Anyawire^37^, Audax Mabulla^38^, Brian M. Wood^39^, Max M. Krasnow^1,40^ & Samuel A. Mehr$^{1,41,\ast}$  
+
+\tiny
+^1^Department of Psychology, Harvard University, Cambridge, MA 02138, USA.
+^2^Department of Cognitive and Information Sciences, University of California Merced, Merced, CA 95343, USA.
+^3^Boston College Department of Psychology, Chestnut Hill, MA 02467, USA.
+^4^Department of Communication, University of California Los Angeles, Los Angeles, CA 90095, USA.
+^5^Department of Psychology, University of Amsterdam, 1012 WX Amsterdam, The Netherlands.
+^6^Operations, Information, and Decisions Department, the Wharton School of the University of Pennsylvania, Philadelphia, PA 19104, USA. 
+^7^Department of Anthropology, Boston University, Boston, MA 02215, USA.
+^8^Jinka University, Jinka, South Omo Zone, Ethiopia. 
+^9^Department of Environmental Health, Faculty of Health Sciences, Jagiellonian University Medical College, 31-066 Krakow, Poland.
+^10^Department of Human Behavior, Ecology and Culture, Max Planck Institute for Evolutionary Anthropology, 04103 Leipzig, Germany.
+^11^School of Psychology, Victoria University of Wellington, Wellington 6012, New Zealand.
+^12^Department of Philosophy, Classics, History of Art and Ideas, University of Oslo, Oslo 0315, Norway.
+^13^Department of Psychology, University of Toronto Scarborough, Toronto, Ontario M1C 1A4, Canada.
+^14^Department of Psychology, University of Toronto Mississauga, Mississauga, Ontario L5L 1C6, Canada.
+^15^Department of Mathematics, University of California Los Angeles, Los Angeles, CA 90095, USA.
+^16^Department of Psychology, University of California, San Diego, La Jolla, CA 92093-0109, USA.
+^17^School of Psychology, University of Auckland, Auckland 1010, New Zealand.
+^18^Department of Linguistic and Cultural Evolution, Max Planck Institute for Evolutionary Anthropology, 04103 Leipzig, Germany. 
+^19^Department of Psychology, Åbo Akademi, 20500 Turku, Finland.
+^20^Department of Health Promotion Sciences, College of Public Health, University of Arizona, Tucson, AZ 85724, USA.
+^21^Department of Medicine, Division of Infectious Diseases, College of Medicine, University of Arizona, Tucson, AZ 85724, USA.
+^22^Department of Family & Community Medicine, College of Medicine, University of Arizona, Tucson, AZ 85724, USA.
+^23^Public Health Research Institute of India, Mysuru 570020, India.
+^24^Department of Anthropology, Ball State University, Muncie, IN 47306, USA.
+^25^Department of Anthropology, University College London, WC1H 0BW London, UK.
+^26^Department of Human Evolutionary Biology, Harvard University, Cambridge, MA 02138, USA.
+^27^Institute for Advanced Study in Toulouse, 31080 Toulouse Cedex 6, France.
+^28^School of Human Evolution and Social Change, Arizona State University, Tempe, AZ 85281, USA.
+^29^Division of Anthropology, California State University, Fullerton, CA 92831, USA.
+^30^Institute of Evolutionary Medicine, University of Zurich, 8006 Zürich, Switzerland.
+^31^Université Toulouse 1 Capitole, 31080 Toulouse Cedex 6, France.
+^32^Universidad Nacional del Altiplano Puno, Puno 21001, Peru. 
+^33^Department of Anthropology, University of California, Davis, Davis, CA 95616, USA.
+^34^Centre for Culture & Evolution, Brunel University London, UB8 3PH Uxbridge, UK.
+^35^Future Generations University, Circle Ville, WV 26807, USA.
+^36^Harpy Eagle Music Foundation, Georgetown, Guyana.
+^37^Mang'ola, Tanzania.
+^38^Department of Archaeology and Heritage, University of Dar es Salaam, Dar es Salaam, Tanzania.
+^39^Department of Anthropology, University of California, Los Angeles, Los Angeles, CA 90095, USA.
+^40^Division of Continuing Education, Harvard University, Cambridge, MA 02138, USA.
+^41^Data Science Initiative, Harvard University, Cambridge, MA 02138, USA.
+
+$^{\wedge}$These authors contributed equally and are listed alphabetically.  
+
+\*Corresponding author. E-mails: [courtneyhilton\@g.harvard.edu](mailto:courtneyhilton@g.harvard.edu){.email} (C.B.H.), [cmoser2\@ucmerced.edu](mailto:cmoser2@ucmerced.edu){.email} (C.J.M.), [sam\@wjh.harvard.edu](mailto:sam@wjh.harvard.edu){.email} (S.A.M.)  
+
+\normalsize
+
+## Abstract {-}
+
+The forms of many species' vocal signals are shaped by their functions [@Morton1977; @Endler1993; @Owren2001; @Fitch2002; @Wiley1983; @Krebs1984; @Karp2014; @Slaughter2013; @Wagner1989; @Ladich1989; @Filippi2017; @Lingle2014; @Custance2012; @Magrath2015; @Lea2008]. In humans, a salient context of vocal signaling is infant care, as human infants are altricial [@Piantadosi2016; @Soltis2004]. Humans often alter their vocalizations to produce "parentese", speech and song produced for infants that differ acoustically from ordinary speech and song [@Fernald1992; @Burnham2013; @Fernald1991a; @Ferguson1964; @Audibert2018; @Kuhl1997; @Englund2005; @Fernald1984; @Falk2017; @Bryant2007; @Piazza2017; @Trehub1993; @Trehub1993a; @Mehr2018a; @Mehr2019; @Trehub2001; @Trehub1998a; @Trehub1997] in fashions that have been proposed to support parent-infant communication and infant language learning [@Thiessen2005; @Trainor2002a; @Werker1989; @Ma2020]; modulate infant affect [@Falk2004; @Trehub2001; @Mehr2017b; @Mehr2017a; @Kotler2019; @Cirelli2019; @Cirelli2020]; and/or coordinate communicative interactions with infants [@Mehr2020; @Senju2008; @Hernik2019]. These theories predict a form-function link in infant-directed vocalizations, with consistent acoustic differences between infant-directed and adult-directed vocalizations across cultures. Some evidence supports this prediction [@Grieser1988; @Fisher1996; @Broesch2015; @Kuhl1997; @Bryant2007; @Farran2016a; @Piazza2017; @Mehr2019], but the limited generalizability of individual ethnographic reports and laboratory experiments [@Henrich2010] and small stimulus sets [@Yarkoni2022], along with intriguing reports of counterexamples [@Broesch2018; @Ochs1984; @Ratner1984; @Schieffelin1990; @Ratner1984a; @Pye1986; @Heath1983; @Trehub2021], leave the question open. Here, we show that people alter the acoustic forms of their vocalizations in a consistent fashion across cultures when speaking or singing to infants. We collected `r item$n$recordings %>% f` recordings of infant- and adult-directed singing and speech produced by `r item$n$voices` people living in 21 urban, rural, and small-scale societies, and analyzed their acoustic forms. We found cross-culturally robust regularities in the acoustics of infant-directed vocalizations, such that infant-directed speech and song were reliably classified from acoustic features found across the 21 societies studied. The acoustic profiles of infant-directedness differed across language and music, but in a consistent fashion worldwide. In a secondary analysis, we studied whether listeners are sensitive to these acoustic features, playing the recordings to `r participant$n$total %>% f` people recruited online, from many countries, who guessed whether each vocalization was infant-directed. Their intuitions were largely accurate, predictable in part by acoustic features of the recordings, and robust to the effects of linguistic relatedness between vocalizer and listener. By uniting rich cross-cultural data with computational methods, we show links between the production of vocalizations and cross-species principles of bioacoustics, informing hypotheses of the psychological functions and evolution of human communication.  
+
+\newpage
+
+# Main {-}
+
+The forms of many animal signals are shaped by their functions, a link arising from production- and reception-related rules that help to maintain reliable signal detection within and across species [@Morton1977; @Endler1993; @Owren2001; @Fitch2002; @Wiley1983; @Krebs1984]. Form-function links are widespread in vocal signals across taxa, from meerkats to fish [@Owren2001; @Karp2014; @Slaughter2013; @Wagner1989; @Ladich1989], causing acoustic regularities that allow cross-species intelligibility [@Filippi2017; @Lingle2014; @Custance2012; @Lea2008]. This facilitates the ability of some species to eavesdrop on the vocalizations of other species, for example, as in superb fairywrens (*Malurus cyaneus*), who learn to flee predatory birds in response to alarm calls that they themselves do not produce [@Magrath2015].
+
+In humans, an important context for the effective transmission of vocal signals is between parents and infants, as human infants are particularly helpless [@Piantadosi2016]. To elicit care, infants use a distinctive alarm signal: they cry [@Soltis2004]. In response, adults produce infant-directed language and music (sometimes called "parentese") in forms of speech and song with putatively stereotyped acoustics [@Fernald1992; @Burnham2013; @Fernald1991a; @Ferguson1964; @Audibert2018; @Kuhl1997; @Englund2005; @Fernald1984; @Falk2017; @Bryant2007; @Piazza2017; @Trehub1993; @Trehub1993a; @Mehr2018a; @Mehr2019; @Trehub2001; @Trehub1998a; @Trehub1997].
+
+These stereotyped acoustics are thought to be functional: supporting language acquisition [@Thiessen2005; @Trainor2002a; @Werker1989; @Ma2020], modulating infant affect and temperament [@Falk2004; @Trehub2001; @Mehr2017b], and/or coordinating communicative interactions with infants [@Mehr2020; @Senju2008; @Hernik2019]. These theories all share a key prediction: like the vocal signals of other species, the forms of infant-directed vocalizations should be shaped by their functions, instantiated with clear regularities across cultures. Put another way, we should expect people to *alter* the acoustics of their vocalizations when those vocalizations are directed toward infants, and they should make those alterations in similar fashions worldwide.
+
+The evidentiary basis for such a claim is controversial, however, given the limited generalizability of individual ethnographic reports and laboratory studies [@Henrich2010]; small stimulus sets [@Yarkoni2022]; and a variety of counterexamples [@Broesch2018; @Ochs1984; @Schieffelin1990; @Ratner1984a; @Pye1986; @Heath1983; @Trehub2021]. Some evidence suggests that infant-directed speech is primarily characterized by higher and more variable pitch [@Rasanen2018] and more exaggerated and variable vowels [@Kuhl1997; @Cristia2014; @Kalashnikova2017], based on studies in modern industrialized societies [@Grieser1988; @Fisher1996; @Kitamura2001; @Fernald1989; @Kuhl1997; @Piazza2017; @Farran2016a] and a few small-scale societies [@Broesch2015; @Broesch2016]. Infants are themselves sensitive to these features, preferring them, even if spoken in unfamiliar languages [@ManyBabiesConsortium2020; @Soley2020; @Byers-Heinlein2021]. But these acoustic features are less exaggerated or reportedly absent in some cultures [@Kitamura2001; @Pye1986; @Fernald1989a] and may vary in relation to the age and sex of the infant [@Kitamura2001; @Kitamura2003; @Kitamura2009], weighing against claims of cross-cultural regularities.
+
+In music, infant-directed songs also seem to have some stereotyped acoustic features. Lullabies, for example, tend toward slower tempos, reduced accentuation, and simple repetitive melodic patterns [@Trehub1997; @Hilton2021; @Mehr2018a; @Mehr2019], supporting functional roles associated with infant care [@Trehub2001; @Mehr2017b; @Mehr2020] in industrialized [@Trehub1998a; @Yan2021; @Custodero2003a; @Mendoza2021] and small-scale societies [@Konner1972; @Marlowe2010]. Infants are soothed by these acoustic features, whether produced in familiar [@Cirelli2019; @Cirelli2020] or unfamiliar songs [@Bainbridge2021], and both adults and children reliably associate the same features with a soothing function [@Mehr2018a; @Mehr2019; @Hilton2021]. But cross-cultural studies of infant-directed song have primarily relied upon archival recordings from disparate sources [@Trehub1993; @Mehr2018a; @Mehr2019]; an approach that poorly controls for differences in voices, behavioral contexts, recording equipment, and historical conventions, limiting the precision of findings and complicating their generalizability.
+
+Measurements of the *same voices* producing multiple vocalizations, gathered from many people in many languages, worldwide, would enable the clearest analyses of whether and how humans alter the acoustics of their vocalizations when communicating with infants, helping to address the lack of consensus in the literature. Further, yoked analyses of both speech and song may explain how the forms of infant-directed vocalizations reliably differ from one another, testing theories of their shared or separate functions [@Thiessen2005; @Trainor2002a; @Werker1989; @Ma2020; @Falk2004; @Trehub2001; @Mehr2017b; @Mehr2020]. 
+
+We take this approach here. We built a corpus of infant-directed speech, adult-directed speech, infant-directed song, and adult-directed song from 21 human societies, totaling `r item$n$recordings` recordings of `r item$n$voices` voices (Fig. 1a, Table 1, and Methods; the corpus is open-access at <https://doi.org/10.5281/zenodo.5525161>). We aimed to maximize linguistic, cultural, geographic, and technological diversity: the recordings cover 18 languages from 11 language families and represent societies located on 6 continents, with varying degrees of isolation from global media, including 4 small-scale societies that lack access to television, radio, or the internet and therefore have strongly limited exposure to language and music from other societies. Participants were asked to provide all four vocalization types.
+
+We used computational analyses of the acoustic forms of the vocalizations and a citizen-science experiment to test (i) the degree to which infant-directed vocalizations are cross-culturally stereotyped; and (ii) the degree to which naïve listeners detect infant-directedness in language and music.
+
+```{r table1, results = "asis"}
+
+read_csv(here("data", "fieldsite-metadata.csv"), na = " ")[ ,1:10] %>%
+  janitor::clean_names() %>%
+  kable(.,
+        format = "latex",
+        booktabs = TRUE,
+        col.names = c("Region","Sub-Region","Society","Language","Language family","Subsistence type","Population","Distance to city (km)","Children per family","Recordings"),
+        escape = FALSE,
+        linesep = "\\addlinespace",
+        longtable = TRUE,
+        align=rep('l', 10)) %>%
+  kable_styling(font_size = 7.5,
+                full_width = FALSE) %>%
+  footnote(general = "Societies from which recordings were gathered.",
+           general_title = "Table 1.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           escape = FALSE,
+           threeparttable = TRUE) %>%
+  column_spec(1, width = ".5in") %>%
+  column_spec(2, width = ".8in") %>%
+  column_spec(3:4, width = ".9in") %>%
+  column_spec(5, width = ".9in") %>%
+  column_spec(6, width = ".7in") %>%
+  column_spec(7, width = ".5in") %>%
+  column_spec(8, width = ".7in") %>%
+  column_spec(9, width = ".5in") %>%
+  column_spec(10, width = ".5in") %>%
+  kableExtra::landscape()
+
+```
+
+```{r fig1, fig.width=5, fig.height=8}
+#| fig.cap="\\textbf{Fig. 1 | Cross-cultural regularities in infant-directed vocalizations.} \\textbf{a}, We recorded examples of speech and song from 21 urban, rural, or small-scale societies, in many languages. The map indicates the approximate locations of each society and is color-coded by the language family or sub-group represented by the society. \\textbf{b}, Machine-learning classification demonstrates the stereotyped acoustics of infant-directed speech and song. We trained two least absolute shrinkage and selection operator (LASSO) models, one for speech and one for song, to classify whether recordings were infant-directed or adult-directed on the basis of their acoustic features. These predictors were regularized using fieldsite-wise cross-validation, such that the model optimally classified infant-directedness across all 21 societies studied. The vertical bars represent the overall classification performance (quantified via receiver operating characteristic/area under the curve; AUC); the error bars represent 95% confidence intervals; the points represent the performance estimate for each fieldsite; and the horizontal dashed lines indicate chance level of 50% AUC. The horizontal bars show the six acoustic features with the largest influence in each classifier; the green and red triangles indicate the direction of the effect, e.g., with median pitch having a large, positive effect on classification of infant-directed speech. The full results of the variable selection procedure are in Extended Data Table 2, with further details in Methods."
+
+knitr::include_graphics(here("viz", "figures", "rev2-fig1-1.pdf"))
+```
+
+## The acoustic forms of infant-directed speech and song are stereotyped across cultures {-}
+
+We studied 15 types of acoustic features in each recording (e.g., pitch, rhythm, timbre) via `r item$acoustic_vars` summary variables (e.g., median, interquartile range) that were treated to reduce the influence of atypical observations (e.g., extreme values caused by loud wind, rain, and other background noises) (see Methods and SI Text 1.1; a codebook is in Extended Data Table 1). To minimize the potential for bias, we collected the acoustic data using automated signal extraction tools that measure physical characteristics of the auditory signal; such physical characteristics lack cultural information (in contrast to, e.g., human annotations) and thus can be applied reliably across diverse audio recordings.
+
+First, we asked whether the acoustics of infant-directed speech and song are stereotyped in similar ways across the societies whose recordings we studied. Following previous work [@Mehr2019], we used a least absolute shrinkage and selection operator (LASSO) logistic classifier [@Friedman2016] with fieldsite-wise *k*-fold cross-validation, separately for speech and song recordings, using all 15 types of acoustic features (see Methods). This approach provides a strong test of cross-cultural regularity: the model is trained *only* on data from 20 of the 21 societies to predict whether each vocalization in the 21st society is infant- or adult-directed. The procedure is repeated 20 further times, with each society being held out, optimizing the model to maximize classification performance across the full set of societies. The summary of the model's performance reflects, corpus-wide, the degree to which infant-directed speech and song are acoustically stereotyped, as high classification performance can only result from cross-cultural regularities.
+
+The models accurately classified both speech and song, on average (Fig. 1b; speech: area under the curve, AUC = `r (speech_LASSO$mod_auc$avg$avg_auc / 100) %>% percent`, 95% CI [`r (speech_LASSO$mod_auc$avg$conf.low / 100) %>% percent`, `r (speech_LASSO$mod_auc$avg$conf.high / 100) %>% percent`]; song: AUC = `r (song_LASSO$mod_auc$avg$avg_auc / 100) %>% percent`, 95% CI [`r (song_LASSO$mod_auc$avg$conf.low / 100) %>% percent`, `r (song_LASSO$mod_auc$avg$conf.high / 100) %>% percent`]). Evaluating classification performance within the recordings in each fieldsite showed a high degree of cross-cultural regularity, with the average performance in 21 of 21 fieldsites' above chance level for both speech and song recordings (Fig. 1b).
+
+To test the reliability of these findings, we repeated them with two alternate cross-validation strategies, using the same cross-validation procedure but doing so across language families and geographic regions instead of fieldsites. The results robustly replicated in both cases (Extended Data Fig. 1). Moreover, to ensure that the main LASSO results were not attributable to particulars of the audio-editing process (see Methods), we also repeated them using unedited audio from the corpus; the results replicated again (Extended Data Fig. 2).
+
+These findings show that the acoustic features of infant-directed speech and song are robustly stereotyped across the 21 societies studied here.
+
+### The acoustic profile of infant-directedness differs across speech and song {-}
+
+We used two convergent approaches to determine the specific acoustic features that are predictive of infant-directedness in speech and song. 
+
+First, the LASSO procedure identified the most reliable predictors of contrasts between infant- and adult-directed vocalizations. The most influential of these predictors are reported in Fig. 1b, with their relative variable importance scores, and show substantial differences in the variables the model relied upon to reliably classify speech and song across cultures. For example, pitch (F~0~ median and interquartile range) and median vowel travel rate strongly differentiated infant-directedness in speech, but not in song; while vowel travel variability (interquartile range) and median intensity strongly differentiated infant-directedness in song, but not in speech. The full results of the LASSO variable selection are in Extended Data Table 2.
+
+Second, in a separate exploratory-confirmatory analysis, we used mixed-effects regression to measure the expected difference in each acoustic feature associated with infant-directedness, separately for speech and song. Importantly, this approach estimates main effects adjusted for sampling variability *and* estimates fieldsite-level effects, allowing for tests of the degree to which the main effects differ in magnitude across cultures (e.g., for a given acoustic feature, if recordings from some fieldsites show larger differences between infant- and adult-directed speech than do recordings from other fieldsites). The analysis was preregistered.
+
+The procedure identified 11 acoustic features that reliably distinguished infant-directedness in song, speech, or both (Fig. 2; statistics are in Extended Data Table 3); we also estimated these effects within each fieldsite (see the doughnut plots in Fig. 2 and full estimates in Extended Data Table 4). 
+
+In speech, across all or the majority of societies, infant-directedness was characterized by higher pitch, greater pitch range, and more contrasting vowels than adult-directed speech from the same voices (largely replicating the results of the LASSO approach; Fig. 1b and Extended Data Table 2). Several acoustic effects were consistent in all fieldsites (e.g., pitch, energy roll-off, pulse clarity), while other features, such as vowel contrasts and inharmonicity were consistent in the majority of them. These patterns align with prior claims of pitch and vowel-contrast being robust features of infant-directed speech [@Kuhl1997; @Fernald1989], and substantiate them across many cultures.
+
+The distinguishing features of infant-directed song were more subtle than those of speech but nevertheless corroborate its purported soothing functions [@Mehr2017b; @Mehr2020; @Trehub2001]: reduced intensity and acoustic roughness, although these were less consistent across fieldsites than the speech results. The less-consistent effects may result from the fact that while solo-voice speaking is fairly natural and representative of most adult-directed speech (i.e., people rarely speak at the same time), much of the world's song occurs in social groups where there are multiple singers and accompanying instruments [@Mehr2019; @Hagen2003; @Mehr2020]. Asking participants to produce solo adult-directed song may have biased participants toward choosing more soothing and intimate songs (e.g., ballads, love songs; see Extended Data Table 5) or less naturalistic renditions of songs; and the production of songs in the presence of an infant, which could potentially alter participants' singing style [@Trehub1997]. Thus, the distinctiveness of infant-directed song (relative to adult-directed song) may be underestimated here.
+
+The exploratory-confirmatory analyses provided convergent evidence for opposing acoustic trends across infant-directed speech and song, as did an alternate approach using principal-components analysis; three principal components most strongly distinguished speech from song, infant-directed song from adult-directed song, and infant-directed speech from adult-directed speech (SI Text 1.2 and Extended Data Fig. 3). Replicating the LASSO findings, for example, median pitch strongly differentiated infant-directed speech from adult-directed speech, but it had no such effect in music; pitch variability had the *opposite* effect across language and music; and further differences were evident in pulse clarity, inharmonicity, and energy roll-off. These patterns are consistent with the possibility of differentiated functional roles across infant-directed speech and song [@Corbeil2016; @Cirelli2020; @Bainbridge2021; @Fernald1992; @Mehr2020; @Trehub2001; @Trehub1998a]. 
+
+Some acoustic features were nevertheless common to both language and music; in particular, overall, infant-directedness was characterized by reduced roughness, which may facilitate parent-infant signalling [@Mehr2017b; @Wiley1983] through better contrast with the sounds of screaming and crying [@Arnal2015; @Soltis2004]; and increased vowel contrasts, potentially to aid language acquisition [@Thiessen2005; @Ma2020; @Trainor2002a] or as a byproduct of socio-emotional signalling [@Kalashnikova2017; @Morton1977].
+
+```{r fig2, fig.height=6, fig.width=7}
+#| fig.cap = "\\textbf{Fig. 2 | How people alter their voices when vocalizing to infants.} Eleven acoustic features had a statistically significant difference between infant-directed and adult-directed vocalizations, within-voices, in speech, song, or both. Consistent with the LASSO results (Fig. 1b and Extended Data Table 2), the acoustic features operated differently across speech and song. For example, median pitch was far higher in infant-directed speech than in adult-directed speech, whereas median pitch was comparable across both forms of song. Some features were highly consistent across fieldsites (e.g., lower inharmonicity in infant-directed speech than adult-directed speech), whereas others were more variable (e.g., lower roughness in infant-directed speech than adult-directed speech). The boxplots, which are ordered approximately from largest to smallest differences between effects across speech and song, represent each acoustic feature's median (vertical black lines) and interquartile range (boxes); the whiskers indicate 1.5 $\\times$ IQR; the notches represent the 95% confidence intervals of the medians; and the doughnut plots represent the proportion of fieldsites where the main effect repeated, based on estimates of fieldsite-wise random effects. Only comparisons that survived an exploratory-confirmatory analysis procedure are plotted; faded comparisons did not reach significance in confirmatory analyses. Significance values are computed via linear combinations, following multi-level mixed-effects models; \\*$p < 0.05$, \\*\\*$p < 0.01$, \\*\\*\\*$p < 0.001$. Regression results are in Extended Data Table 3 and full reporting of fieldsite-level estimates is in Extended Data Table 4. Note: the model estimates are normalized jointly on speech and song data so as to enable comparisons \\textit{across} speech and song for each feature; as such, the absolute distance from 0 for a given feature is not directly interpretable, but estimates are directly comparable across speech and song."
+
+knitr::include_graphics(here("viz", "figures", "rev2-fig2-1.pdf"))
+```
+
+## Naïve listeners are sensitive to the acoustic forms of infant-directed vocalizations {-}
+
+If people worldwide reliably alter their speech and song when interacting with infants, as the above findings demonstrate, this may enable listeners to make reliable inferences concerning the intended targets of speech and song, consistent with functional accounts of infant-directed vocalization [@Thiessen2005; @Trainor2002a; @Werker1989; @Ma2020; @Falk2004; @Trehub2001; @Mehr2017b; @Mehr2017a; @Kotler2019; @Mehr2020]. We tested this secondary hypothesis in a simple listening experiment, conducted in English using web-based citizen-science methods [@Hilton2022].
+
+We played excerpts from the vocalization corpus to `r participant$n$total` people in the "Who's Listening?" game on <https://themusiclab.org> (after exclusions; see Methods). The participants resided in `r participant$n$countries` countries (Fig. 3b) and reported speaking `r participant$n$languages` languages fluently (including second languages, for bilinguals). We asked them to judge, quickly, whether each vocalization was directed to a baby or to an adult (see Methods and Extended Data Fig. 4). 
+
+The responses were strongly biased toward "baby" responses when hearing songs and away from "baby" responses when hearing speech, regardless of the actual target of the vocalizations (Extended Data Fig. 5). To correct for these response biases, we used *d*-prime analyses at the level of each vocalist, i.e., analyzing listeners' sensitivity to infant-directedness in speech and song (SI Text 1.3). Unless noted otherwise, all estimates reported here are generated by mixed-effects linear regression, adjusting for fieldsite nested within world region, via random effects.
+
+The listeners' intuitions were accurate, on average and across fieldsites (Fig. 3a). Sensitivity ($d'$) was significantly higher than the chance level of 0 (speech: $d'$ = `r task$d$mod_output$sungspeech$estimate %>% r2`, 95% CI [`r task$d$mod_output$sungspeech$conf.low %>% r2`, `r task$d$mod_output$sungspeech$conf.high %>% r2`]; song: $d'$ = `r task$d$mod_output$sungsong$estimate %>% r2`, 95% CI [`r task$d$mod_output$sungsong$conf.low %>% r2`, `r task$d$mod_output$sungsong$conf.high %>% r2`]; $ps<.05$). These results were robust to learning effects (Extended Data Fig. 6) and to multiple data trimming decisions. For example, they replicated whether or not recordings with confounding contextual/background cues (e.g., an audible infant) were excluded and also when data from English-language recordings, which might be understandable to participants, were excluded (SI Text 1.4). 
+
+To test the consistency of listener inferences across cultures, we estimated fieldsite-level sensitivity from the random effects in the model. Cross-site variability was evident in the magnitude of sensitivity effects: listeners were far better at detecting infant-directedness in some sites than others (with very high $d'$ in the Wellington, New Zealand site for both speech and song, but marginal $d'$ in Tannese Vanuatans, for example). Nevertheless, the estimated mean fieldsite-wise $d'$ was greater than 0 in both speech and song in all fieldsites (Fig. 3a); with 95% confidence intervals not overlapping with 0 in 18 of 21 fieldsites for speech and 16 of 20 for song (Extended Data Table 6; one $d'$ estimate could not be computed for song due to missing data). Most fieldsite-wise sample sizes after exclusions were small (see Methods), so we caution that fieldsite-wise estimates are far less interpretable than the overall $d'$ estimate reported above.
+
+Analyses of cross-cultural variability among *listeners* revealed similarities in their perception of infant-directedness. In particular, coefficient of variation scores revealed little variation in listener accuracy across countries of origin (`r task$acc$randoms$country$cv %>% p`) and native languages (`r task$acc$randoms$language$cv %>% p`), with the estimated effects of age and gender both less than 1%. And more detailed demographic characteristics available for a subset of participants in the United States, including socioeconomic status and ethnicity, also explained little variation in accuracy (SI Text 1.5). These findings suggest general cross-demographic consistency in listener intuitions.
+
+One important aspect of listeners was predictive of their performance, however: their degree of relatedness to the vocalizer, on a given trial. To analyze this, we estimated fixed effects for three forms of linguistic relatedness between listener and vocalizer: (i) *weak relatedness*, when a language the listener spoke fluently was from a different language family than that of the vocalization (e.g., when the vocalization was in Mentawai, an Austronesian language, and the listener's native language was Mandarin, a Sino-Tibetan language); (ii) *moderate relatedness*, when the languages were from the same language family (e.g., when the vocalization was in Spanish and the listener spoke fluent English, which are both Indo-European languages); or (iii) *strong relatedness*, when a language the listener spoke fluently exactly matched the language of the vocalization. 
+
+Sensitivity was significantly above chance in all cases (Fig. 3c), with increases in performance associated with increasing relatedness (unrelated: estimated speech $d'$ = `r task$d$marginal_lang$speechunrelated$predicted %>% r2`, song $d'$ = `r task$d$marginal_lang$songunrelated$predicted %>% r2`; same language family: speech $d'$ = `r task$d$marginal_lang$speechsame_fam$predicted %>% r2`, song $d'$ = `r task$d$marginal_lang$songsame_fam$predicted %>% r2`; same language: speech $d'$ = `r task$d$marginal_lang$speechsame_lang$predicted %>% r2`, song $d'$ = `r task$d$marginal_lang$songsame_lang$predicted %>% r2`). Some of this variability is likely attributable to trivial language comprehensiblity (i.e., in cases of strong relatedness, listeners very likely understood the words of the vocalization, strongly shaping their infant-directedness rating). 
+
+These findings provide an important control, as they demonstrate that the overall effects (Fig. 3a) are not attributable to linguistic similarities between listeners and vocalizers (Fig. 3c), which could, for example, allow listeners to detect infant-directedness on the basis of the words or other linguistic features of the vocalizations, as opposed to their *acoustic* features. And while the experiment's instructions were presented in English (suggesting that all listeners likely had at least a cursory understanding of English), the findings were robust to the exclusion of all English-language recordings (SI Text 1.4).
+
+We also found suggestive evidence of other, non-linguistic links between listeners and vocalizers being predictive of sensitivity. For example, fieldsite population size and distance to the nearest urban center were correlated estimated sensitivity to infant-directedness in that fieldsite. These and similar effects (reported in SI Text 1.6) suggests that performance was somewhat higher in the larger, more industrialized fieldsites that are more similar to the environments of internet users, on average. But these analyses are necessarily coarser than the linguistic relatedness tests reported above.
+
+```{r fig3, eval=TRUE}
+#| fig.cap = "\\textbf{Fig. 3 | Naïve listeners distinguish infant-directed vocalizations from adult-directed vocalizations across cultures.} Participants listened to vocalizations drawn at random from the corpus, viewing the prompt \"Someone is speaking or singing. Who do you think they are singing or speaking to?\" They could respond with either \"adult\" or \"baby\" (Extended Data Fig. 4). From these ratings, we computed listener sensitivity ($d'$). \\textbf{a}, Listeners reliably detected infant-directedness in both speech and song, overall (indicated by the diamonds, with 95% confidence intervals indicated by the horizontal lines), and across many fieldsites (indicated by the black dots), although the strength of the fieldsite-wise effects varied substantially (see the distance between the vertical dashed line and the black dots; the shaded regions represent 50%, 80%, and 95% confidence intervals, in increasing order of lightness). Note that one fieldsite-wise $d'$ could not be estimated for song; complete statistical reporting is in Extended Data Table 6. \\textbf{b}, The participants in the citizen-science experiment hailed from many countries; the gradients indicate the total number of vocalization ratings gathered from each country. \\textbf{c}, The main effects held across different combinations of the linguistic backgrounds of vocalizer and listener. We split all trials from the main experiment into three groups: those where a language the listener spoke fluently was the same as the language of the vocalization (*n* = 82,094; those where a language the listener spoke fluently was in the same major language family as the language of the vocalization (*n* = 110,664), and those with neither type of relation (*n* = 285,378). The plot shows the estimated marginal effects of a mixed-effects model predicting $d'$ values across language and music examples, after adjusting for fieldsite-level effects. In all three cases, the main effects replicated; increases in linguistic relatedness corresponded with increases in sensitivity."
+
+knitr::include_graphics(here("viz", "figures", "rev2-fig3-1.pdf"))
+```
+
+### Human intuitions of infant-directedness are modulated by vocalization acoustics {-}
+
+Last, we studied the degree to which the acoustic features of the recordings were predictive of listeners' intuitions concerning them (measured as the experiment-wide *proportions* of infant-directedness ratings for each vocalization, in a similar approach to other research [@Hilton2021]). These proportions can be considered a continuous measure of perceived infant-directedness, per the ears of the naïve listeners. We trained two LASSO models to predict the proportions, with the same fieldsite-wise cross-validation procedure used in the acoustic analyses reported above. Both models explained variation in human listeners’ intuitions, albeit more so in speech than in song (Fig. 4; speech $R^2$ = `r lassos$speech$r.squared %>% r2`; song $R^2$ = `r lassos$song$r.squared %>% r2`, $ps$ < 0.0001), likely because the acoustic features studied here more weakly guided listeners' intuitions in song than they did in speech.
+
+If human inferences are attuned to cross-culturally reliable acoustic correlates of infant-directedness, one might expect a close relationship between the strength of *actual* acoustic differences between vocalizations on a given feature and the relative influence of that feature on human intuitions. To test this question, we correlated how strongly a given acoustic feature distinguished infant-directed from adult-directed speech and song (Fig. 2; estimated with mixed-effects modeling) with the variable importance of that feature in the LASSO model trained to predict human intuitions (the bar plots in Fig. 4). We found a significant strong positive relationship for speech ($r$ = `r cor_tests$speech$estimate %>% r2`, *p* `r cor_tests$speech$p.value %>% fp`) but not for song ($r$ = `r cor_tests$song$estimate %>% r2`, *p* `r cor_tests$song$p.value %>% fp`). 
+
+This difference may help to explain the weaker intuitions of the naïve listeners in song, relative to speech: naïve listeners' inferences about speech were more directly driven by acoustic features that *actually* characterize infant-directed speech worldwide, whereas their inferences about song were erroneously driven by acoustic features that *less reliably* characterize infant-directed song worldwide. For example, songs with higher pulse clarity and median second formats, and lower median first formants were more likely to be rated as infant-directed, but these features did not reliably correlate with infant-directed song across cultures in the corpus (and, accordingly, neither approach to the acoustic analyses identified them as reliable correlates of infant-directedness in music). Intuitions concerning infant-directed song may also have been driven by more subjective features of the recordings, higher-level acoustic features that we did not measure, or both. 
+
+We note, however, that the interpretation of this difference may be limited by the representativeness of the sample of recordings: the differences in the models' ability to predict listeners' intuitions could alternatively be driven by differences in the true representativeness of one or more of the vocalization types.
+
+```{r fig4, fig.width=9.25, fig.height=7}
+#| fig.cap="\\textbf{Fig. 4 | Human inferences about infant-directedness are predictable from acoustic features of vocalizations.} To examine the degree to which human inferences were linked to the acoustic forms of the vocalizations, we trained two LASSO models to predict the proportion of \"baby\" responses for each recording from the human listeners. While both models explained substantial variability in human responses, the model for speech was more accurate than the model for song, in part because the human listeners erroneously relied on acoustic features for their predictions in song that less reliably characterized infant-directed song across cultures (see Figs. 1b and 2). Each point represents a recorded vocalization, plotted in terms of the model's estimated infant-directedness of the model and the average \"infant-directed\" rating from the naïve listeners; the barplots depict the relative explanatory power of the top 8 acoustical features in each LASSO model, showing which features were most strongly associated with human inferences (the green or red triangles indicate the directions of effects, with green higher in infant-directed vocalizations and red lower); the dotted diagonal lines represent a hypothetical perfect match between model predictions and human guesses; the solid black lines depict linear regressions; and the grey ribbons represent the standard errors of the mean, from the regressions."
+
+knitr::include_graphics(here("viz", "figures", "rev2-fig4-1.pdf"))
+```
+
+# Discussion {-}
+
+We provide convergent evidence for cross-cultural regularities in the acoustic design of infant-directed speech and song. Infant-directedness was robustly characterized by core sets of acoustic features, across the 21 societies studied, and these sets of features differed reliably across speech and song. Naïve listeners were sensitive to the acoustical regularities, as they reliably identified infant-directed vocalizations as more infant-directed than adult-directed vocalizations, despite the fact that the vocalizations were of largely unfamiliar cultural, geographic, and linguistic origin.
+
+Thus, despite evident variability in language, music, and infant care practices worldwide, when people speak or sing to fussy infants, they modify the acoustic features of their vocalizations in similar and mutually intelligible ways across cultures. This evidence supports the hypothesis that the forms of infant-directed vocalizations are shaped by their functions, in a fashion similar to the vocal signals of many non-human species.
+
+These findings do not mean that infant-directed speech and song always sound the same across cultures. Indeed, the classification accuracy of a machine-learning model varied, with some fieldsites demonstrating larger acoustic differences between infant- and adult-directed vocalizations than other fieldsites. Similarly, the citizen-science participants' ratings of infant-directedness differed substantially in magnitude across fieldsites. But such variability also does not imply the *absence* of cross-cultural regularities. Instead, they support an account of acoustic variation stemming from epigenetic rules: species-typical traits which bias cultural variation in one direction rather than another [@Lumsden1980]. Put another way, the pattern of evidence strongly implies a core set of cross-cultural acoustic and perceptual regularities which are also shaped by culture.
+
+By analyzing both speech and song recorded from the same voices, we discerned precise differences in the ways infant-directedness is instantiated in language and music. In response to the same prompt of addressing a "fussy infant", infant-directedness in speech and song was instantiated with opposite trends in acoustic modification (relative to adult-directed speech and song, respectively): infant-directed speech was more intense and contrasting (e.g., more pitch variability, higher intensity) while infant-directed song was more subdued and soothing (e.g., less pitch variability, lower intensity). These acoustic dissociations comport with functional dissociations, with speech being more attention-grabbing, the better to distract from baby’s fussiness [@Werker1989; @Trainor2002a]; and song being more soothing, the better to lower baby’s arousal [@Bainbridge2021; @Cirelli2020; @Mehr2017b; @Mehr2017a; @Kotler2019; @Mehr2019; @Trehub2001]. Speech and song are both capable of playful or soothing roles [@Trehub2021] but each here tended toward one acoustic profile over the other, despite both types of vocalization being elicited here in the *same* context: vocalizations used "when the baby is fussy".
+
+Many of the reported acoustic differences are consistent with properties of vocal signalling in non-human animals, raising the intriguing possibility that the designs of human communication systems are rooted in the basic principles of bioacoustics [@Morton1977; @Endler1993; @Owren2001; @Fitch2002; @Wiley1983; @Krebs1984; @Karp2014; @Slaughter2013; @Wagner1989; @Ladich1989; @Filippi2017; @Lingle2014; @Custance2012; @Magrath2015; @Lea2008]. For example, in both speech and song, infant-directedness was robustly associated with purer and less harsh vocal timbres, and greater formant-frequency dispersion (expanded vowel space). And in speech, one of the largest and most cross-culturally robust effects of infant-directedness was higher pitch (F~0~). In non-human animals, these features have convergently evolved across taxa in the functional context of signalling friendliness or approachability in close contact calls [@Morton1977; @Owren2001; @Fitch1997; @Kalashnikova2017], in contrast to alarm calls or signals of aggression, which are associated with low-pitched, rough sounds with less formant dispersal [@Fitch2002; @Blumstein2012; @Reber2017; @Reby2005]. The use of these features in infant care may originate from signalling approachability to baby, but may have later acquired further functions more specific to the human developmental context. For example, greater formant-frequency dispersion accentuates vowel contrasts, which could facilitate language acquisition [@Thiessen2005; @Bertoncini1988; @Werker1988; @Polka1994; @Kalashnikova2017]; and purer vocal timbre may facilitate communication by contrasting conspicuously with the acoustic context of infant cries [@Wiley1983] (for readers unfamiliar with infants, their cries are acoustically harsh [@Soltis2004; @Arnal2015]).
+
+Such conspicuous contrasts may have the effect of altering speech to make it more song-like when interacting with infants, as Fernald [@Fernald1992] notes: *"...the communicative force of [parental] vocalizations derive not from their arbitrary meanings in a linguistic code, but more from their immediate musical power to arouse and alert, to calm, and to delight"*. 
+
+Comparisons of the acoustic effects across speech and song reported here support this idea. Infant-directedness altered the pitch level (F~0~) of speech, bringing it roughly to a level typical of song, while also increasing pulse clarity. These characteristics of music have been argued to originate from elaborations to infant-directed vocalizations, where both use less harsh but more variable pitch patterns, more temporally variable and expansive vowel spaces, and attention-orienting rhythmic cues to provide infants with ostensible "flashy" signals of attention and pro-social friendliness [@Mehr2017b; @Mehr2020; @Rasanen2018; @Trainor1997; @Tsang2017]. Pitch alterations are not *absent* from infant-directed song, of course; in one study, mothers sang a song at higher pitch when producing a more playful rendition, and a lower pitch when producing a more soothing rendition [@Cirelli2019]. But on average, both infant- and adult-directed song, along with infant-directed speech, tend to be higher in pitch than adult-directed speech. In sum: the constellation of acoustic features that characterize infant-directedness in speech, across cultures, are rather musical.
+
+We leave open at least four sets of further questions. First, the results are suggestive of universality in the production of infant-directed vocalizations, because the corpus covers a swath of geographic locations (21 societies on 6 continents), languages (12 language families), and different subsistence regimes (8 types) (see Table 1). But the participants studied do not constitute a representative sample of humans (nor do the societies or languages studied constitute a representative sample of human societies or languages), so a strong claim of universality would not be justified. Future work may assess the validity of such a universality claim by studying infant-directed vocalizations in a wider range of human societies, and by using phylogenetic methods to examine whether people in societies that are distantly related nonetheless produce similar infant-directed vocalizations.
+
+Second, the naïve listener experiment tested orders of magnitude more participants and covering a far more diverse set of countries and native languages than did prior research, raising the possibility that they may generalize across many populations. But such a generalization is not fully justified, because the instructions of the experiment were presented in English, on an English-language website. Future work may determine their generality by testing perceived infant-directedness in multilingual experiments, to more accurately characterize cross-cultural variability in the perception of infant-directedness; and by testing listener intuitions among groups with reduced exposure to a given set of infant-directed vocalizations, such as very young infants or people from isolated, distantly related societies, as in related efforts [@ManyBabiesConsortium2020; @McDermott2016; @Bryant2007]. Such research would benefit in particular from a focus on societies previously reported to have unusual vocalization practices, infant care practices, or both [@Broesch2018; @Schieffelin1990; @Ratner1984a; @Pye1986]; and would also clarify the extent to which convergent practices across cultures are due to cultural borrowing (in the many cases where societies are not fully isolated from the influence of global media).
+
+Third, most prior studies of infant-directed vocalizations use *elicited* recordings [@Kuhl1997; @Fernald1991a; @Trehub1993a; @Falk2017; @Ma2020; @Cirelli2019], as did we. While this method may underestimate the differences between infant-directed and adult-directed vocalizations, whether and how simulated infant-directed speech and song differ from their naturalistic counterparts is poorly understood. Future work may explore this issue by analyzing recordings of infant-directed vocalizations that are covertly and/or unobtrusively collected in a non-elicited manner, as in research using wearable recording devices for infants [@Mendoza2021; @Bergelsonunderreview]. This may also resolve potential confounds from the wording of instructions to vocalizers.
+
+Last, we note that speech and song are used in multiple contexts with infants, of which “addressing a fussy infant” is just one [@Fernald1992; @Trehub1998a]. One curious finding may bear on general questions of the psychological functions of music: naïve listeners displayed a bias toward "adult" guesses for speech and "baby" guesses for song, regardless of their actual targets. We speculate that listeners treated "adult" and "baby" as the default reference levels for speech and song, respectively, against which acoustic evidence was compared, a pattern consistent with theories that posit song as having a special connection to infant care in human psychology [@Mehr2020; @Trehub2001].
+
+\bigskip
+
+# Methods {-}
+
+## Vocalization corpus {-}
+
+```{r corpus_info}
+
+#########################################################
+# This chunks computes some basic stats about the corpus.
+#########################################################
+
+corpus_info <- read_csv(here("data", "stimuli-rawMetadata.csv")) %>%
+  select(vocalist = 6,
+         voc_gender = 11,
+         voc_role = 12,
+         inf_present = 13,
+         inf_gender = 14,
+         relationship = 15,
+         inf_age = 16) %>%
+  mutate(society = str_sub(vocalist, 1, 3))
+
+corpus <- list()
+corpus$voc <- corpus_info %>% count(society) %>% summarise(med = median(n), min = min(n), max = max(n))
+corpus$female_voc <- corpus_info %>% filter(voc_gender %in% c("Male", "Female")) %>% janitor::tabyl(voc_gender) %>% filter(voc_gender == "Female")
+corpus$parents_or_grandparents <- corpus_info %>%
+  drop_na(voc_role) %>%
+  janitor::tabyl(voc_role) %>%
+  filter(grepl(regex("(mother)|(father)|(parent)"), voc_role, ignore.case = T)) %>%
+  summarise(total = sum(percent))
+corpus$inf_pres <- corpus_info %>% janitor::tabyl(inf_present) %>% filter(inf_present == "Yes")
+corpus$inf_gender <- corpus_info %>% filter(inf_gender %in% c("Male", "Female")) %>% janitor::tabyl(inf_gender) %>% filter(inf_gender == "Female")
+corpus$inf_age <- corpus_info %>% drop_na(inf_age) %>% pull(inf_age) %>% skim()
+
+```
+
+We built a corpus of `r item$n$recordings %>% f` recordings of infant-directed song, infant-directed speech, adult-directed song, and adult-directed speech (all audio is available at <https://doi.org/10.5281/zenodo.5525161>). Participants (*N* = `r nrow(corpus_info)`) living in 21 societies (Fig. 1a and Table 1) produced each of these vocalizations, respectively, with a median of `r corpus$voc$med` participants per society (range `r corpus$voc$min`-`r corpus$voc$max`). From those participants for whom information was available, most were female (`r corpus$female_voc$percent %>% percent`) and nearly all were parents or grandparents of the focal infant (`r corpus$parents_or_grandparents$total %>% percent`). Audio for one or more examples was unavailable from a small minority of participants, in cases of equipment failure or when the participant declined to complete the full recording session (`r item$non_full` recordings, or `r item$non_full_pct %>% p` of the corpus, were missing).
+
+Recordings were collected by principal investigators and/or staff at their field sites, all using the same data collection protocol. They translated instructions to the native language of the participants, following the standard research practices at each site. There was no procedure for screening out participants, but we encouraged our collaborators to collect data from parents rather than non-parents. Fieldsites were selected partly by convenience (i.e., via recruiting principal investigators at fieldsites with access to infants and caregivers) and partly to maximize cultural, linguistic, and geographic diversity (see Table 1).
+
+For infant-directed song and infant-directed speech, participants were asked to sing and speak to their infant as if they were fussy, where "fussy" could refer to anything from frowning or mild whimpering to a full tantrum. At no fieldsites were difficulties reported in the translation of the English word "fussy", suggesting that participants understood it. For adult-directed speech, participants spoke to the researcher about a topic of their choice (e.g., they described their daily routine). For adult-directed song, participants sang a song that was not intended for infants; they also stated what that song was intended for (e.g., "a celebration song"). Participants vocalized in the primary language of their fieldsite, with a few exceptions (e.g., when singing songs without words; or in locations that used multiple languages, such as Turku, which included both Finnish and Swedish speakers).
+
+For most participants (`r corpus$inf_pres$percent %>% percent`) an infant was physically present during the recording (the infants were `r corpus$inf_gender$percent %>% percent` female; age in months: $M$ = `r corpus$inf_age$numeric.mean %>% r2`; SD = `r corpus$inf_age$numeric.sd %>% r2`; range `r corpus$inf_age$numeric.p0`-`r corpus$inf_age$numeric.p100`). When an infant was not present, participants were asked to imagine that they were vocalizing to their own infant or grandchild, and simulated their infant-directed vocalizations (a brief discussion is in SI Text 1.7).
+
+In all cases, participants were free to determine the content of their vocalizations. This was intentional: imposing a specific content category on their vocalizations (e.g., "sing a *lullaby*") would likely alter the acoustic features of their vocalizations, which are known to be influenced by experimental contexts [@Trehub1997a]. Some participants produced adult-directed songs that shared features with the intended soothing nature of the infant-directed songs; data on the intended behavioral context of each adult-directed song are in Extended Data Table 5.
+
+All recordings were made with Zoom H2n digital audio recorders, using foam windscreens (where available). To ensure that participants were audible along with researchers, who stated information about the participant and environment before and after the vocalizations, recordings were made with a 360° dual *x-y* microphone pattern. This produced two uncompressed stereo audio files (WAV) per participant at 44.1 kHz; we only analyzed audio from the two-channel file on which the participant was loudest.
+
+The principal investigator at each fieldsite provided standardized background data on the behavior and cultural practices of the society (e.g., whether there was access to mobile-phones/TV/radio, and how commonly people used ID speech or song in their daily lives). Most items were based on variables included in the D-PLACE cross-cultural corpus [@Kirby2016].
+
+The 21 societies varied widely in their characteristics, from cities with millions of residents (Beijing) to small-scale hunter-gatherer groups of as few as 35 people (Hadza). All of the small-scale societies studied had limited access to TV, radio, and the internet, mitigating against the influence of exposure to the music and/or infant care practices of other societies. Four of the small-scale societies (Nyangatom, Toposa, Sápara/Achuar, and Mbendjele) were completely without access to these communication technologies.
+
+The societies also varied in the prevalence of infant-directed speech and song in day-to-day life. The only site reported to lack infant-directed song in contemporary practice was the Quechuan/Aymaran site, although it was also noted that people from this site know infant-directed songs in Spanish and use other vocalizations to calm infants. Conversely, the Mbendjele BaYaka were noted to use infant-directed song, but rarely used infant-directed speech. In most sites, the frequency of infant-directed song and speech varied. For example, among the Tsimane, song was reportedly infrequent in the context of infant care; when it appears, however, it is apparently used to soothe and encourage infants to sleep.
+
+Our default strategy was to analyze all available audio from the corpus. In some cases, however, this was inadvisable (e.g., in the naïve listener experiment, when a listener might understand the language of the recording, and make a judgment based on the recording's linguistic content rather than its acoustic content); all exclusion decisions are explicitly stated throughout.
+
+## Acoustic analyses {-}
+
+### Acoustic feature extraction {-}
+
+We manually extracted the longest continuous and uninterrupted section of audio from each recording (i.e., isolating vocalizations by the participant from interruptions from other speakers, the infant, and so on), using Adobe Audition. We then used the silence detection tool in Praat [@Boersma2019], with minimum sounding intervals at 0.1 seconds and minimum silent intervals at 0.3 seconds, to remove all portions of the audio where the participant was not speaking (i.e., the silence between vocalization phrases). These were manually concatenated in Python, producing denoised recordings, which were subsequently checked manually to ensure minimal loss of content.
+
+We extracted and subsequently analyzed acoustic features using Praat [@Boersma2019], MIRtoolbox [@Lartillot2008], temporal modularity using discrete Fourier transforms for rhythmic variability [@Patel2006], and normalized pairwise variability indices [@Mertens2004]. These features consisted of measurements of pitch (e.g., F~0~, the fundamental frequency), timbre (e.g., roughness), and rhythm (e.g., tempo; n.b., because temporal measures would be affected by the concatenation process, we computed these variables on unconcatenated audio only); all summarized over time: producing `r item$acoustic_vars` variables in total. We standardized feature values within-voices, eliminating between-voice variability. Further technical details are in SI Text 1.1.
+
+For both the LASSO analyses (Fig. 1b) and the regression-based acoustic analyses (Fig. 2), we restricted the variable set to `r item$acoustic_vars_post` summary statistics of median and interquartile range, as these correlated highly with other summary statistics (e.g., maximum, range) but were less sensitive to extreme observations.
+
+### LASSO modeling {-}
+
+We trained least absolute shrinkage and selection operator (LASSO) logistic classifiers with cross-validation using `tidymodels` [@Kuhn2020]. For both speech and song, these models were provided with the set of `r item$acoustic_vars_post` acoustic variables described in the previous section. These raw features were then demeaned for speech and song separately within-voices and then normalized at the level of the whole corpus. During model training, multinomial log-loss was used as an evaluation metric to fit the lambda parameter of the model. 
+
+For the main analyses (Fig. 1b, Extended Data Table 2, and Extended Data Fig. 2) we used a *k*-fold cross-validation procedure at the level of fieldsites. Alternate approaches used *k*-fold cross-validation at the levels of language family and world region (Extended Data Fig. 1). We evaluated model performance using a receiver operating characteristic metric, binary area-under-the-curve (AUC). This metric is commonly used to evaluate the diagnostic ability of a binary classifier; it yields a score between 0% and 100%, with a chance level of 50%.
+
+### Mixed-effects modeling {-}
+
+Following a preregistered exploratory-confirmatory design, we fitted a multi-level mixed-effects regression predicting each acoustic variable from the vocalization types, after adjusting for voice and fieldsite as random effects, and allowing them to vary for each vocalization type separately. To reduce the risk of Type I error, we performed this analysis on a randomly selected half of the corpus (exploratory, weighting by fieldsite) and only report results that successfully replicated in the other half (confirmatory). We did not correct for multiple tests because the exploratory-confirmatory design restricts the tests to those with a directional prediction. 
+
+These analyses deviated from the preregistration in two minor ways. First, we retained planned comparisons within vocalization types, but we eliminated those that compared across speech and song when we found much larger acoustic differences between speech and song overall than the differences between infant- and adult-directed vocalizations (a fact we failed to predict). As such, we adopted the simpler approach of post-hoc comparisons that were only within speech and within song. For transparency, we still report the preregistered post-hoc tests in Extended Data Fig. 7, but suggest that these comparisons be interpreted with caution. Second, to enable fieldsite-wise estimates (reported in Extended Data Table 4), we normalized the acoustic data corpus-wide and included a random effect of participant, rather than normalizing within-voices (as within-voice normalization would set all fieldsite-level effects to 0, making cross-fieldsite comparisons impossible).
+
+## Naïve listener experiment {-}
+
+```{r first-trial, eval=F}
+
+###############################################################
+# This chunk computes basic stats on the naive listener data
+# subsetting to only first trials. We do not use these outputs
+# in text, but are here for reference.
+###############################################################
+
+# subset of data, only first trials per participant
+# note that this point we've already removed all participants who self-reported having done the experiment before
+data_ft <- trial_data %>%
+  filter(first_trial == 1)
+
+# running this dataframe through the same analysis
+# initialising empty list to store output
+task_ft <- list()
+
+# Accuracy for all participants
+task_ft$acc$all <- data_ft %>%
+  group_by(user_id) %>%
+  summarise(accuracy = mean(correct)) %>%
+  summarise(t = t.test(accuracy, mu = .5, na.exclude = TRUE) %>% tidy(),
+            sd = sd(accuracy))
+
+# accuracy per vocalization type
+task_ft$acc$voc <- data_ft %>%
+  # per id, per vocalization type
+  group_by(user_id, voc_type) %>%
+  # tally accuracy
+  summarise(accuracy = mean(correct)) %>%
+  # storing output of t-test
+  group_by(voc_type) %>%
+  summarise(t = t.test(accuracy, mu = .5, na.exclude = TRUE) %>% tidy(),
+            sd = sd(accuracy)) %>%
+  split(.$voc_type)
+
+```
+
+We analyzed all data available at the time of writing this paper from the "Who's Listening?" game at <https://themusiclab.org/quizzes/ids>, a continuously running `jsPsych` [@deLeeuw2015] experiment distributed via Pushkin [@Hartshorne2019], a platform that facilitates large-scale citizen-science research. This approach involves the recruitment of volunteer participants, who typically complete experiments because the experiments are intrinsically rewarding, with larger and more diverse samples than are typically feasible with in-laboratory research [@Hilton2022; @Sheskin2020]. A total of `r user_info$started %>% f` participants began the experiment, the first in `r user_info$first %>% format(., format = "%B %Y")` and the last in `r user_info$last %>% format(., format = "%B %Y")`. Demographics in the sub-sample of United States participants are in Extended Data Table 7.
+
+We played participants vocalizations from a subset of the corpus, excluding those that were less than 10 seconds in duration ($n$ = `r item$n_10sec_exclude`) and those with confounding sounds produced by a source other than the target voice in the first 5 seconds of the recording (e.g., a crying baby or laughing adult in the background; $n$ = `r user_info$n_excluded %>% f`), as determined by two independent annotators who remained unaware of vocalization type and fieldsite with disagreements resolved by discussion. A test of the robustness of the main effects to this exclusion decision is in SI Text 1.4. We also excluded participants who reported having previously participated in the same experiment ($n$ = `r user_info$n_done %>% f`); participants who reported being younger than 12 years old ($n$ = `r user_info$age12_or_younger %>% f`); and those who reported having a hearing impairment ($n$ = `r user_info$hearing %>% f`).
+
+This yielded a sample of `r participant$n$total` participants (gender: `r participant$n$gender["Female"]` female, `r participant$n$gender["Male"]` male, `r participant$n$gender["Other"]` other, `r participant$n$gender["not_reported"]` did not disclose; age: median `r participant$age$median` years, interquartile range `r participant$age$IQR_low`-`r participant$age$IQR_high`). Participants self-reported living in `r participant$n$countries` different countries (Fig. 3b) and self-reported speaking `r participant$n$languages_1st` first languages and `r participant$n$languages_2nd` second languages (`r participant$n$languages_2nd_unique` of which were not in the list of first languages), for a total of `r participant$n$languages` different languages. Roughly half the participants were native English speakers from the United States. We supplemented these data with a paid online experiment, to increase the sampling of a subset of recordings in the corpus (SI Text 1.8).
+
+Participants listened to at least 1 and at most 16 vocalizations drawn from the subset of the corpus (as they were free to leave the experiment before completing it) for a total of `r item$ratings$n$total` ratings (infant-directed song: $n$ = `r item$ratings$n$IDsong`; infant-directed speech: $n$ = `r item$ratings$n$IDspeech`; adult-directed song: $n$ = `r item$ratings$n$ADsong`; adult-directed speech: $n$ = `r item$ratings$n$ADspeech`). The vocalizations were selected with blocked randomization, such that a set of 16 trials included 4 vocalizations in English and 12 in other languages; this method ensured that participants heard a substantial number of non-English vocalizations. This yielded a median of `r item$ratings$songwise$median` ratings per vocalization (interquartile range `r item$ratings$songwise$IQR_low`-`r item$ratings$songwise$IQR_high`; range `r item$ratings$songwise$min`-`r item$ratings$songwise$max`) and thousands of ratings for each society (median = `r item$ratings$sitewise$median %>% f`; interquartile range `r item$ratings$sitewise$IQR_low %>% f`-`r item$ratings$sitewise$IQR_high %>% f`). The experiment was conducted only in English, so participants likely had at least a cursory knowledge of English; a test of the robustness of the main effects when excluding English-language recordings is in SI Text 1.4.
+
+We asked participants to classify each vocalization as either directed toward a baby or an adult. The prompt "Someone is speaking or singing. Who do you think they are singing or speaking to?" was displayed while the audio played; participants could respond with either "adult" or "baby", either by pressing a key corresponding to a drawing of an infant or adult face (when the participant used a desktop computer) or by tapping one of the faces (when the participant used a tablet or smartphone). The locations of the faces (left vs. right on a desktop; top vs. bottom on a tablet or smartphone) were randomized participant-wise. Screenshots are in Extended Data Fig. 4.
+
+We asked participants to respond as quickly as possible, a common instruction in perception experiments, to reduce variability that could be introduced by participants hearing differing lengths of each stimulus; to reduce the likelihood that participants used linguistic content to inform their decisions; and to facilitate a response-time analysis (Extended Data Fig. 8), as `jsPsych` provides reliable response time data [@Anwyl-Irvine2021]. We also used the response time data as a coarse measure of compliance, by dropping trials where participants were likely inattentive, responding very quickly (less than 500 ms) or slowly (more than 5 s). Most response times fell within this time window (`r (1 - user_info$rt_p) %>% p` of trials).
+
+The experiment included two training trials, using English-language recordings of a typically infant-directed song ("The wheels on the bus") and a typically adult-directed song ("Hallelujah"); `r task$prac$first %>% p` of participants responded correctly by the first try and `r task$prac$second %>% p` responded correctly by the second try, implying that the vast majority of the participants understood the task.
+
+As soon as they made a choice, playback stopped. After each trial, we told participants whether or not they had answered correctly and how long, in seconds, they took to respond. At the end of the experiment, we showed participants their total score and percentile rank (relative to other participants).
+
+\bigskip
+
+# End notes {-}
+
+## Data, code, and materials availability {-}
+
+A reproducible R Markdown manuscript; data, analysis code, and visualizations; supplementary fieldsite-level data; the recording collection protocol; and code for the naïve listener experiment are available at <https://github.com/themusiclab/infant-speech-song>. The audio corpus is available at <https://doi.org/10.5281/zenodo.5525161>. The preregistration for the auditory analyses is at <https://osf.io/5r72u>. Readers may participate in the naïve listener experiment by visiting <https://themusiclab.org/quizzes/ids>.
+
+## Acknowledgments {-}
+
+This research was supported by the Harvard University Department of Psychology (M.M.K. and S.A.M.); the Harvard College Research Program (H.L-R.); the Harvard Data Science Initiative (S.A.M.); the National Institutes of Health Director's Early Independence Award DP5OD024566 (S.A.M. and C.B.H.); the Academy of Finland Grant 298513 (J. Antfolk); the Royal Society of New Zealand Te Apārangi Rutherford Discovery Fellowship RDF-UOA1101 (Q.D.A., T.A.V.); the Social Sciences and Humanities Research Council of Canada (L.K.C.); the Polish Ministry of Science and Higher Education grant N43/DBS/000068 (G.J.); the Fogarty International Center (P.M., A. Siddaiah, C.D.P.); the National Heart, Lung, and Blood Institute, and the National Institute of Neurological Disorders and Stroke Award D43 TW010540 (P.M., A. Siddaiah); the National Institute of Allergy and Infectious Diseases Award R15-AI128714-01 (P.M.); the Max Planck Institute for Evolutionary Anthropology (C.T.R., C.M.); a British Academy Research Fellowship and Grant SRG-171409 (G.D.S.); the Institute for Advanced Study in Toulouse, under an Agence nationale de la recherche grant, Investissements d'Avenir ANR-17-EURE-0010 (L.G., J. Stieglitz); the Fondation Pierre Mercier pour la Science (C.S.); and the Natural Sciences and Engineering Research Council of Canada (S.E.T.). We thank the participants and their families for providing recordings; Lawrence Sugiyama for supporting pilot data collection; Juan Du, Elizabeth Pillsworth, Polly Wiessner, and John Ziker for collecting or attempting to collect additional recordings; Ngambe Nicolas for research assistance in the Republic of the Congo; Zuzanna Jurewicz for research assistance in Toronto; Maskota Delfi and Rustam Sakaliou for research assistance in Indonesia; Willy Naiou and Amzing Altrin for research assistance in Vanuatu; S. Atwood, Anna Bergson, Dara Li, Luz Lopez, and Emilė Radytė for project-wide research assistance; and Jonathan Kominsky, Lindsey Powell, and Lidya Yurdum for feedback on the manuscript.
+
+## Author contributions {-}
+
+- S.A.M. and M.M.K. conceived of the research, provided funding, and coordinated the recruitment of collaborators and creation of the corpus.
+- S.A.M. and M.M.K. designed the protocol for collecting vocalization recordings with input from D.A., who piloted it in the field.
+- L.G., A.G., G.J., C.T.R., M.B.N., A. Martin, L.K.C., S.E.T., J. Song, M.K., A. Siddaiah, T.A.V., Q.D.A., J. Antfolk, P.M., A. Schachner, C.D.P., G.D.S., S.K., M.S., S.A.C., J.Q.P., C.S., J. Stieglitz, C.M., R.R.S., and B.M.W collected the field recordings, with support from E.A., A. Salenius, J. Andelin, S.C.C., M.A., and A. Mabulla.
+- S.A.M., C.M.B., and J. Simson designed and implemented the online experiment.
+- C.J.M. and H.L-R. processed all recordings and designed the acoustic feature extraction with S.A.M. and M.M.K.; C.M.B. provided associated research assistance.
+- C.M. designed the fieldsite questionnaire with assistance from M.B. and C.J.M., who collected the data from the principal investigators.
+- C.B.H. and S.A.M. led analyses, with additional contributions from C.J.M., M.B., D.K., and M.M.K.
+- C.B.H. and S.A.M. designed the figures.
+- C.B.H. wrote computer code, with contributions from S.A.M., C.J.M., and M.B.
+- D.K. conducted code review.
+- C.J.M., H.L-R., M.M.K., and S.A.M. wrote the initial manuscript.
+- C.B.H. and S.A.M. wrote the first revision, with contributions from C.J.M. and M.B.
+- S.A.M. wrote the second and third revisions, with contributions from C.B.H. and C.J.M.
+
+## Ethics {-}
+
+Ethics approval for the collection of recordings was provided by local institutions and/or the home institution of the collaborating author who collected data at each fieldsite. These included the Bioethics Committee, Jagiellonian University (1072.6120.48.2017); Board for Research Ethics, Åbo Akademi University; Committee on the Use of Human Subjects, Harvard University (IRB16-1080 and IRB18-1739); Ethics Committee, School of Psychology, Victoria University of Wellington (0000023076); Human Investigation Committee, Yale University (MODCR00000571); Human Participants Ethics Committee, University of Auckland (018981); Human Research Protections Program, University of California San Diego (161173); Institutional Review Board, Arizona State University (STUDY00008158); Institutional Review Board, Florida International University (IRB-17-0067); Institutional Review Board, Future Generations University; Max Planck Institute for Evolutionary Anthropology; Research Ethics Board, University of Toronto (33547); Research Ethics Committee, University College London (13121/001); Review Board for Ethical Standards in Research, Toulouse School of Economics/IAST (2017-06-001 and 2018-09-001); and Tanzania Commission for Science and Technology (COSTECH). Ethics approval for the naïve listener experiment was provided by the Committee on the Use of Human Subjects, Harvard University (IRB17-1206). Informed consent was obtained from all participants.
+
+## Additional information {-}
+
+The authors declare no competing interests.  
+**Supplementary information** is available for this paper.  
+**Correspondence and requests for materials** should be addressed to C.B.H., C.J.M., and S.A.M.  
+
+\newpage
+
+# Supplementary Text {-}
+
+\setcounter{section}{1}
+## Technical details of the acoustic feature extraction
+
+We extracted acoustic features with four sets of tools, described below, and also preprocessed them to reduce the influence of atypical observations.
+
+### Praat
+
+We extracted intensity, pitch, and first and second formant values from the denoised recordings every 0.03125 seconds. For female participants, the pitch floor was set at 100 Hz, with a pitch ceiling at 600 Hz, and a maximum formant of 5500 Hz. For male participants, these values were 75 Hz, 300 Hz, and 5000 Hz, respectively. From these data, several summary values were calculated for each recording: mean and maximum first and second formants, mean pitch, and minimum intensity. In addition to these summary statistics, we measured the intensity and pitch rates as change in these values over time. For vowel measures, the first and second formants were used to calculate both the average vowel space used, as well as the vowel change rate (measured as change in Euclidean formant space) over time.
+
+### MIRtoolbox
+
+All MIRtoolbox (v. 1.7.2) features were extracted with default parameters [@Lartillot2008]. *mirattackslope* returns a list of all attack slopes detected, so final analyses were done on summary features (e.g., mean, median, etc.). Final analyses were also done on summary features for *mirroughness*, which returns time series data of roughness measures in 50ms windows. We RMS-normalized the mean of *mirroughness*, following previous work [@Buyens2017]. MIRtoolbox features were computed on the denoised recordings, with the exception of *mirtempo* and *mirpulseclarity*, where removing the silences between vocalizations would have altered the tempo.
+
+### Rhythmic variability
+
+For temporal modulation spectra we followed a previous method [@Ding2017], which combines discrete Fourier transforms applied to contiguous six-second excerpts. To analyze the entirety of each recording, we appended all recordings with silence to be exact multiples of six-seconds. The location of the peak (Hz) and variance of the temporal modulation spectra were extracted from their RMS values. Because intervening silence would influence temporal modulation measures, we computed them on recordings *before* they had been denoised.
+
+### Normalized pairwise variability index (nPVI)
+
+The nPVI represents the temporal variance of data with discrete events, which makes it especially useful for comparing speech and music [@Patel2006]. We used an automated syllable- and phrase-detection algorithm to extract events [@Mertens2004]. We computed nPVI in two ways: by averaging the nPVI of each phrase within a recording, as well as by treating the entire recording as a single phrase. Because intervening silence would influence nPVI measures, we computed them on recordings *before* they had been denoised.
+
+### Preprocessing
+
+Automated acoustic analyses are highly sensitive at extremes (e.g., impossible values caused by non-vocal sounds, like loud wind). To correct for these issues, we Winsorized all acoustic variables. This process defines observations exceeding the lowest and highest 5 percentile ranks as outliers, recoding them as the values of those percentile boundaries. These data were used for all acoustic analyses. This approach is generally preferable to trimming extreme values, as trimming overcompensates for outliers by removing them entirely [@Yale1976]. Analyses of the acoustic features using an alternate method (i.e., imputing extreme values with the mean observation for each feature within each fieldsite) yielded comparable results; readers are welcome to try alternate trimming methods with the open data and materials.
+
+In the cases of three acoustic features (roughness, vowel travel rate, and pulse clarity), we used log-transformed data, because the raw data were highly skewed. This decision was supported by the exploratory-confirmatory approach; that is, results replicated across both exploratory and confirmatory samples in the log-transformed data.
+
+## Alternate analysis of acoustic features via principal-components approach
+
+We conducted an exploratory principal components analysis of the full `r item$acoustic_vars` acoustic variables (Extended Data Fig. 3). The analysis accounted for ~40% of total variability in acoustic features. The results provide convergent evidence that the main forms of acoustic variation partition into orthogonal clusters that most strongly distinguish speech from song overall (in PC1); most strongly distinguish infant-directedness in *song* (in PC2); and most strongly distinguish infant-directedness in *speech* (in PC3). Factor loadings are in Extended Data Table 8; these largely corroborate the findings of the LASSO and exploratory-confirmatory analyses. 
+
+One further pattern that the principal components analysis highlights is that infant-directedness makes speech more "songlike", in terms of higher pitch and reduced roughness (PC3); but speech strongly differed from song overall in terms of the variability and rate of variability of pitch, intensity, and vowels, and infant-directedness further exaggerated these differences for speech (PC1).
+
+## Quantifying sensitivity with signal detection theory
+
+To quantify the listener sensitivity to infant-directedness in speech and song, and to quantify their response biases, we computed the metrics of $d'$ and $c$ (*criterion*) over the stimuli. These quantities were calculated with standard techniques from signal detection theory [@Hautus2022]. 
+
+Specifically, a response on a given trial was coded as a `hit` if the trial was an infant-directed vocalization and the participant correctly responded with `baby`; a `miss` if for an infant-directed vocalization, they responded `adult`; a `false-alarm` if for an adult-directed vocalization, they responded `baby`; and a `correct-reject` if for an adult-directed vocalization, they correctly responded `adult`. 
+
+The hit rate $H$ was then computed as the total number of hits for a given recording, divided by the total number of hits plus the misses; the false-alarm rate $F$ was computed as the total number of misses for a given recording, divided by the total number of false-alarms plus the correct-rejects. These scores were then conservatively adjusted with the log-linear correction for extreme scores [@Snodgrass1988], and finally $d'$ was estimated via the following equation, where the function $z(\cdot)$ represents the inverse of the normal cumulative distribution function:
+
+$$
+d' = z(H) - z(F).
+$$
+
+Criterion ($c$) was estimated as:
+
+$$
+c = \dfrac{-(z(H) - z(F))}{2}.
+$$
+
+## Robustness tests of main results in naïve listener experiment 
+
+On the suggestion of an anonymous reviewer, we repeated the main analyses of the naïve listener experiment (i.e., estimated sensitivity to infant-directedness in speech and song) with two alternate data exclusion strategies. First, the analyses and figures in the main text only study ratings of recordings that contained minimal extraneous sounds (such as a baby crying; see Methods). To ensure that the exclusion of these recordings did not account for the main findings, we repeated the analyses while including ratings of *all* recordings, including those with putatively confounding background sounds. They robustly replicated, with comparable effect sizes (speech: $d'$ = `r task$d$mod_confounds$sungspeech$estimate %>% r2`, 95% CI [`r task$d$mod_confounds$sungspeech$conf.low %>% r2`, `r task$d$mod_confounds$sungspeech$conf.high %>% r2`]; song: $d'$ = `r task$d$mod_confounds$sungsong$estimate %>% r2`, 95% CI [`r task$d$mod_confounds$sungsong$conf.low %>% r2`, `r task$d$mod_confounds$sungsong$conf.high %>% r2`]; $ps<.05$).
+
+A further potential confound concerns listeners' familiarity with the languages spoken or sung in the recordings. In the main text analyses, we explicitly model the expected differences in sensitivity that could result from lower or higher degrees of linguistic relatedness between the vocalizer and the listener (see, e.g., Fig. 3c). However, because the experiment was only conducted in English, many participants likely could understand at least some parts of the English-language vocalizations. To ensure that these recordings did not account for the main findings, we repeated the analyses while excluding all English-language recordings. These recordings came predominantly from the Wellington, San Diego, and Toronto fieldsites (where nearly all recordings were in English) but also appeared elsewhere, such as the Arawak fieldsite (where English Creole recordings were often comprehensible to English speakers), and in a few other sites, when a speaker happened to be bilingual and produce English-language vocalizations. The results robustly replicated with these exclusions (speech: $d'$ = `r task$d$mod_no_english$sungspeech$estimate %>% r2`, 95% CI [`r task$d$mod_no_english$sungspeech$conf.low %>% r2`, `r task$d$mod_no_english$sungspeech$conf.high %>% r2`]; song: $d'$ = `r task$d$mod_no_english$sungsong$estimate %>% r2`, 95% CI [`r task$d$mod_no_english$sungsong$conf.low %>% r2`, `r task$d$mod_no_english$sungsong$conf.high %>% r2`]; $ps<.05$).
+
+## Demographic analyses of a subsample of naïve listeners
+
+An anonymous reviewer raised the possibility that conducting the naïve listener experiment online, as opposed to in a laboratory, reduced the diversity of the sample; if so, this could bias the results of the experiment, in principle. To test this question, we analyzed demographic information from participants living in the United States, who provided income, education level, and ethnicity data. 
+
+Descriptive statistics revealed that the subsample of United States participants was highly diverse (Extended Data Table 7), including, for example, representation from all ethnicity categories currently defined by the National Institutes of Health, and a broad range of annual household incomes. The sample was generally more representative of the United States population than are samples recruited in typical laboratory studies, which may skew towards wealthier samples with representation of fewer ethnicity categories [@Sheskin2020; @Hartshorne2019].
+
+Nevertheless, we proceeded by asking whether demographic factors were likely to affect people's ability to perceive infant-directedness. We ran mixed-effect regressions for each of the available demographic variables with random intercepts for the vocalist in the recording, and fixed effects for vocalization type and the demographic factor. While the main effects of income, education, or race on task performance were statistically significant (*ps* < 0.0001), in all cases, the effect sizes were tiny, explaining ~0.1% of variance in the model. These findings imply that the choice of a citizen-science approach likely did not bias the results of the experiment, at least in United States participants.
+
+## Society-level predictors for naïve listener data
+
+Listener sensitivity within each fieldsite was correlated with a number of society-level characteristics: rank-order population size (speech: $\tau$ = `r task$survey$pop$speech$estimate %>% r2`; song: $\tau$ = `r task$survey$pop$song$estimate %>% r2`), distance from fieldsite to nearest urban center (speech: $r$ = `r task$survey$dist$speech$estimate %>% r2`; song: $r$ = `r task$survey$dist$song$estimate %>% r2`), and number of children per family (speech: $r$ = `r task$survey$child$speech$estimate %>% r2`; song: $r$ = `r task$survey$child$song$estimate %>% r2`; all $ps <.001$). Each of these predictors were highly correlated with each other (all $r$ > 0.6), however, suggesting that they did not each contribute unique variance. There was no correlation with ratings of how frequently infant-directed vocalizations were used within each society ($ps >.4$). These findings suggest that at least some cross-fieldsite variability in listener sensitivity to infant-directedness is attributable to the *cultural* relatedness between vocalizers and listeners (as opposed to the *linguistic* relatedness analyzed in in the Main Text and Fig. 3c).
+
+## Simulated infant-directed vocalizations
+
+Prior research has shown that simulated infant-directedness is qualitatively similar, albeit less exaggerated than when authentic, for both speech [@Fernald1984a] and song [@Trehub1997]. Indeed, a model of the naïve listener results adjusting for fieldsite indeed showed a small decrease in "baby" guesses when an infant was not present (ID song: `r inf_present$mod$inf_presentYesvoc_typeA$estimate %>% p`, ID speech: `r inf_present$mod$inf_presentYesvoc_typeB$estimate %>% p`, AD song: `r inf_present$mod$inf_presentYesvoc_typeC$estimate %>% p`, AD speech: `r inf_present$mod$inf_presentYesvoc_typeD$estimate %>% p`, *p*s < .0001), but this effect was not stronger for vocalizations that were infant-directed compared to adult-directed ($\chi$^2^(`r inf_present$inf_compare$df`) = `r inf_present$inf_compare$statistic %>% r2`, $p$ `r inf_present$inf_compare$p.value %>% fp`). Both the naive listener results and acoustic analyses were robust to whether these simulated infant-directed vocalizations were included or excluded, however, implying that the use of simulated infant-directed vocalizations did not undermine the robustness of the main effects.
+
+## Additional data collection via Prolific
+
+In revising this manuscript, we discovered that a small subset of the corpus had been erroneously excluded from the main experiment. In most cases, these were recordings that had been too-conservatively edited to be too short to include in the experiment (but could reasonably be edited to include longer sections of audio); in some other cases, the original excerpting included confounding background noises that, upon additional editing, were avoidable. To ensure maximal coverage of the fieldsites studied here, we re-excerpted the audio of 103 examples and collected supplemental naïve listener data on these recordings via a Prolific experiment (N = `r user_info$qualtrics$n`, `r user_info$qualtrics$gender$Male` male, `r user_info$qualtrics$gender$Female` female, `r user_info$qualtrics$gender$Other` other, mean age = `r user_info$qualtrics$age %>% round(1)` years). The Prolific experiment was identical to the citizen-science experiment, except that each participant was paid US\$15/hr, rather than volunteering; and each participant rated `r user_info$qualtrics$n_stim` recordings instead of up to 16. 
+
+We included in the Prolific experiment the set of recordings that were erroneously excluded from the citizen-science experiment, along with 85 additional recordings randomly selected from those that *were* included in the citizen-science experiment, so as to ensure that each Prolific participant heard a balanced set of vocalization types. The two cohorts' ratings of the recordings in common across the two experiments were highly correlated ($r$ = `r user_info$qualtrics_validation$estimate %>% r2`, $p$ `r user_info$qualtrics_validation$p.value %>% fp`), demonstrating that they had similar intuitions concerning infant-directedness in speech and song. As such, in the main text, we report all the ratings together without disambiguating between the cohorts.
+
+\clearpage
+
+```{r extended_fig1}
+#| fig.cap = "\\textbf{Extended Data Fig. 1 | LASSO classification of acoustic features with alternate cross-validation approaches.} We repeated the main LASSO analysis (Fig. 1b) twice, but rather than conducting *k*-fold cross-validation across fieldsites, we did so across language families and world regions (see descriptive information about the fieldsites in Table 1). The results replicated robustly across both models, with corpus-wide classification performance significantly above chance in all cases. The vertical bars represent the overall classification performance (quantified via receiver operating characteristic/area under the curve; AUC); the error bars represent 95% confidence intervals; the points represent the performance estimate for each language family or world region; and the horizontal dashed lines indicate chance level of 50% AUC."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig1-1.pdf"))
+```
+
+\clearpage
+
+```{r extended_fig2}
+#| fig.cap = "\\textbf{Extended Data Fig. 2 | Replication of main LASSO results using unedited audio.} As a test of robustness, we repeated the main LASSO analyses (Fig. 1b) with acoustic features extracted from raw, unedited audio. This approach ensures that the main results are not attributable to idiosyncrasies in the audio introduced by the editing process. The results repeated robustly, with above-chance performance in all fieldsites for both speech and song, and with the 3 most influential acoustic features selected by the model repeating across both specifications (see Fig. 1b). The vertical bars represent the overall classification performance (quantified via receiver operating characteristic/area under the curve; AUC); the error bars represent 95% confidence intervals; the points represent the average performance for each fieldsite; and the horizontal dashed lines indicate chance level of 50% AUC. The horizontal bars show the acoustic characteristics with the largest influence in each classifier; the green and red triangles indicate the direction of the effect, e.g., with median pitch having a large, positive effect on classification of infant-directed speech. See Methods for further details."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig2-1.pdf"))
+```
+
+\clearpage
+
+```{r extended_fig3}
+#| fig.cap = "\\textbf{Extended Data Fig. 3 | Principal-components analysis of acoustic features.} As an alternative approach to the acoustics data, we ran a principal-components analysis on the full 94 acoustic variables, to test whether an unsupervised method also yielded opposing trends in acoustic features across the different vocalization types. It did. Three components explained approximately 40% of total variability in the acoustic features. Moreover, the clearest differences between vocalization types accorded with the LASSO and mixed-effects modeling (Figs. 1b and 2). The first principal component most strongly differentiated speech and song, overall; the second most strongly differentiated infant-directed song from adult-directed song; and the third most strongly differentiated infant-directed speech from adult-directed speech. The violins indicate kernel density estimations and the boxplots represent the medians and interquartile ranges. Significance values are computed via Wilcoxon signed-rank tests; \\*$p < 0.05$, \\*\\*$p < 0.01$, \\*\\*\\*$p < 0.001$. Feature loadings are in Extended Data Table 8."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig3-1.pdf"))
+```
+
+\clearpage
+
+```{r extended_fig4}
+#| fig.cap = "\\textbf{Extended Data Fig. 4 | Screenshots from the naïve listener experiment.} On each trial, participants heard a randomly selected vocalization from the corpus and were asked to quickly guess to whom the vocalization was directed: an adult or a baby. The experiment used large emoji and was designed to display comparably on desktop computers (\\textbf{a}) or tablets/smartphones (\\textbf{b})."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig4-1.pdf"))
+```
+
+```{r extended_fig5}
+#| fig.cap = "\\textbf{Extended Data Fig. 5 | Response biases in the naïve listener experiment}. \\textbf{a}, Listeners showed reliable biases: regardless of whether a vocalization was infant- or adult-directed, the listeners gave speech recordings substantially fewer \"baby\" responses than expected by chance, and gave song recordings substantially more \"baby\" responses. The gray points represent average ratings for each of the 1615 recordings in the corpus, split by speech and song; the orange and blue points indicate the means of each vocalization type; and the horizontal dashed line represents hypothetical chance level of 50%. \\textbf{b}, Despite the response biases, within speech and song, the raw data nevertheless showed clear differences between infant-directed and adult-directed vocalizations, i.e., by comparing infant-directedness scores within the same voice, across infant-directed and adult-directed vocalizations (visible here in the steep negative slopes of the gray lines). The main text results report only $d'$ statistics for these data, for simplicity, but the main effects are nonetheless visible here in the raw data. The points indicate average ratings for each recording; the gray lines connecting the points indicate the pairs of vocalizations produced by the same voice; the half-violins are kernel density estimations; the boxplots represent the medians, interquartile ranges, and 95% confidence intervals (indicated by the notches); and the horizontal dashed lines indicate the response bias levels (from \\textbf{a})."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig5-1.pdf"))
+```
+
+```{r extended_fig6}
+#| fig.cap = "\\textbf{Extended Data Fig. 6 | The main effects in the naïve listener experiment are not attributable to learning.} \\textbf{a}, This panel repeats the raw accuracy data reported in Extended Data Fig. 5b, but using only data from responses that were participants' first trial, to avoid the possibility of any learning effects over the course of their participation. The results do not change appreciably. See further details in the caption to Extended Data Fig. 5. \\textbf{b}, Over the course of multiple trials in the experiment, which contained corrective feedback, participants' raw accuracy barely increased. The lines depict linear regressions for each of the four vocalization types and the shaded regions depict 95% confidence intervals."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig6-1.pdf"))
+```
+
+```{r extended_fig7}
+#| fig.cap = "\\textbf{Extended Data Fig. 7 | Exploratory-confirmatory selected acoustic features for pre-registered analyses.} The preregistered analyses included comparisons of the acoustic features of infant-directed vocalizations, regardless of whether they included speech or song. For the reasons discussed in the Methods, and per the results reported in Fig. 2, these results should be interpreted with caution, as direct comparisons of acoustic features across modalities (language vs. music) may be spurious or may hide underlying variation within each modality. Moreover, these analyses do not include fieldsite-level random effects, so they are less conservative than those reported in Fig. 2 (i.e., they identify a larger number of acoustic features). The boxplots show the 25 acoustic features with a significant difference in at least one main comparison (e.g., infant-directed song vs. infant-directed speech, in the right panel), in both the exploratory and confirmatory analyses. All variables are normalized across participants. The boxplots represent the median and interquartile range; the whiskers indicate 1.5 $\\times$ IQR; and the notches represent the 95% confidence intervals of the medians. Faded comparisons did not reach significance in exploratory analyses. Significance values are computed via linear combinations, following mixed-effects models; \\*$p < 0.05$, \\*\\*$p < 0.01$, \\*\\*\\*$p < 0.001$. Prespecified hypotheses about each comparison are posted in the project GitHub repository."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig7-1.pdf"))
+```
+
+```{r extended_fig8}
+#| fig.cap="\\textbf{Extended Data Fig. 8 | Response-time analysis of naïve listener experiment.} We recorded the response times of participants in their mobile or desktop browsers, using `jsPsych` (see Methods), and asked whether, when responding correctly, participants more rapidly detected infant-directedness in speech or song. They did not: a mixed-effects regression predicting the difference in response time between infant-directed and adult-directed vocalizations (within speech or song), adjusting hierarchically for fieldsite and world-region, yielded no significant differences ($p$s > .05 from linear combination tests). The points indicate median response times for each recording across all correct responses; the gray lines connecting the points indicate the pairs of vocalizations produced by the same participant; the half-violins are kernel density estimations; and the boxplots represent the medians, interquartile ranges, and 95% confidence intervals (indicated by the notches)."
+knitr::include_graphics(here("viz", "figures", "rev2-extended_fig8-1.pdf"))
+```
+
+\clearpage
+
+```{r extended_table1, results='asis'}
+read_csv(here("viz", "tables", "ED-table1.csv"), na = " ") %>%
+  kable(.,
+        "latex",
+        booktabs = TRUE,
+        longtable = TRUE,
+        linesep = "\\addlinespace") %>%
+  kable_styling(latex_options = c("hold_position", "repeat_header"),
+                font_size = 7,
+                full_width = TRUE) %>%
+  footnote(general = "Codebook for acoustic features. Variable names are stubs; in the datasets on the project GitHub repository, suffixes are added to denote summary statistics (e.g., mir_attack_mean).",
+           general_title = "Extended Data Table 1.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           threeparttable = TRUE) %>%
+  column_spec(1, width = ".75in") %>%
+  column_spec(2, width = ".9in", monospace = TRUE) %>%
+  column_spec(3, width = ".75in") %>%
+  column_spec(4:5, width = "1.7in")
+
+```
+
+\clearpage
+
+```{r extended_table2, results='asis'}
+
+recode_variable_names <- function(data, var_name) {
+  data %>% 
+  mutate(
+    {{var_name}} := recode(
+      {{var_name}},
+      "praat_f0_median" = "Pitch (Median)",
+      "praat_f0_IQR" = "Pitch (IQR)",
+      "praat_f2_median" = "Second Formant (Median)", 
+      "praat_intensity_IQR" = "Intensity (IQR)",
+      "mir_attack_med" = "Attack Curve Slope (Median)",
+      "mir_attack_iqr" = "Attack Curve Slope (IQR)",
+      "mir_tempo" = "Tempo",
+      "mir_rolloff85" = "Energy Roll-Off (85th %-ile)",
+      "mir_inharmonicity" = "Inharmonicity",
+      "mir_pulseclarity" = "Pulse Clarity",
+      "npvi_total" = "Rhythmic Variability (nPVI)",
+      "praat_voweltravel_rate_median" = "Vowel Travel Rate (Median)",
+      "praat_voweltravel_IQR" = "Vowel Travel (IQR)",
+      "praat_intensity_median" = "Intensity (Median)",
+      "mir_roughness_med_log" = "Roughness (Median)",
+      "mir_roughness_iqr_log" = "Roughness (IQR)",
+      "praat_f2_IQR" = "Second Formant (IQR)",
+      "mir_pulseclarity_log" = "Pulse Clarity",
+      "praat_voweltravel_rate_median_log" = "Vowel Travel Rate (Median)",
+      "praat_voweltravel_rate_IQR_log" = "Vowel Travel Rate (IQR)",
+      "tm_peak_hz" = "Peak Tempo"
+    )
+  )
+}
+
+speech_vars <- speech_LASSO$var_import_data %>% 
+  filter(Importance > 0, Variable != "(Intercept)") %>% 
+  mutate(coefficient = ifelse(Sign == "POS", Importance, Importance*-1),
+         coefficient = round(coefficient, 3)) %>% 
+  select(feature = Variable, coefficient)
+speech_vars <- recode_variable_names(speech_vars, feature)
+
+song_vars <- song_LASSO$var_import_data %>% 
+  filter(Importance > 0, Variable != "(Intercept)") %>% 
+  mutate(coefficient = ifelse(Sign == "POS", Importance, Importance*-1),
+         coefficient = round(coefficient, 3)) %>% 
+  select(feature = Variable, coefficient)
+song_vars <- recode_variable_names(song_vars, feature)
+
+
+diff <- abs(nrow(speech_vars) - nrow(song_vars))
+if(nrow(speech_vars) < nrow(song_vars)) {
+  speech_vars <- speech_vars %>% 
+    bind_rows(., list(feature = rep(NA, diff), coefficient = rep(NA, diff)))
+} else if(nrow(speech_vars) < nrow(song_vars)) {
+  song_vars <- song_vars %>% 
+    bind_rows(., list(feature = rep(NA, diff), coefficient = rep(NA, diff)))
+}
+
+options(knitr.kable.NA = '')
+
+
+# tibble(feature = "Speech", coefficient = NA) %>% 
+#   bind_rows(., speech_vars) %>% 
+#   bind_rows(., tibble(feature = "Song", coefficient = NA)) %>% 
+#   bind_rows(., song_vars) %>% 
+tibble(feature = "Speech", coefficient = NA, feature2 = "Song", coefficient2 = NA) %>% 
+  bind_rows(., bind_cols(speech_vars, song_vars) %>% rename(feature = 1, coefficient = 2, feature2 = 3, coefficient2 = 4)) %>% 
+  kable(.,
+      format = "latex",
+      booktabs = TRUE,
+      col.names = c("Acoustic feature", "Coefficient", "Acoustic feature", "Coefficient"),
+      linesep = "\\addlinespace") %>%
+  kable_styling(font_size = 9) %>%
+  add_header_above(c("Speech" = 2, "Song" = 2)) %>%
+  row_spec(c(1), bold = TRUE) %>% 
+  # row_spec(c(12), hline_after = TRUE) %>% 
+  footnote(general = "The predictive influence of each of the acoustical features in distinguishing infant-directed from adult-directed vocalizations, chosen via two LASSO models (performance and the top six features for each model are depicted in Fig. 1b). The coefficients can be interpreted in a similar fashion to a logistic regression, i.e., as changes in the predicted log-odds ratio (with positive values indicating a higher likelihood of infant-directedness).",
+           general_title = "Extended Data Table 2.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           escape = FALSE,
+           threeparttable = TRUE) %>% 
+  column_spec(1, width = "2in") %>%
+  column_spec(2, width = "0.7in") %>%
+  column_spec(3, width = "2in") %>%
+  column_spec(4, width = "0.7in")
+
+```
+
+\clearpage
+
+```{r extended_table3, results='asis'}
+
+table_creator <- function(data_x, comparison_label) {
+  output <- data_x %>%
+  select(feature, estimate, std.error, statistic, adj.p.value) %>%
+  mutate(Statistic = case_when(
+    grepl("_med", feature, ignore.case = TRUE) ~ "Median",
+    grepl("_iqr", feature, ignore.case = TRUE) ~ "IQR",
+    TRUE ~ "Whole"
+  ),
+  Feature = case_when(
+    grepl("_f1", feature) ~ "First Formant",
+    grepl("_f0", feature) ~ "Pitch (F_SUBZERO)",
+    grepl("_f2", feature) ~ "Second Formant",
+    grepl("attack", feature) ~ "Attack Curve Slope",
+    grepl("roughness", feature) ~ "Acoustic Roughness",
+    grepl("_f1", feature) ~ "First Formant",
+    grepl("intensity", feature) ~ "Intensity",
+    grepl("voweltravel_rate", feature) ~ "Vowel Travel Rate",
+    grepl("vowel", feature) & !grepl("rate", feature) ~ "Vowel Travel",
+    grepl("inharmonicity", feature) ~ "Inharmonicity",
+    grepl("roll", feature) ~ "Energy Roll-off (85 \\%ile)",
+    grepl("pulseclarity", feature) ~ "Pulse Clarity"
+  ),
+  row_n = row_number(),
+  Comparison = ifelse(row_n == 1, comparison_label, " "),
+  Feature = case_when(
+    row_n == 1 ~ Feature,
+    lag(Feature) == Feature ~ " ",
+    TRUE ~ Feature
+  ),
+  p.value = pvalue(adj.p.value),
+  across(where(is.numeric), ~ round(.x, digits = 3))
+  ) %>%
+  select(Comparison, Feature, Statistic, estimate, std.error, statistic, p.value)
+
+  return(output)
+}
+
+linesep <- function(x, y = character()) {
+  if (!length(x))
+    return(y)
+  linesep(x[-length(x)], c(rep('', x[length(x)] - 1), '\\addlinespace', y))
+}
+
+tmp <- table_creator(final$speech_features, " ") %>% slice(1) %>%
+              mutate(across(c(2:7), ~ ifelse(TRUE, NA, NA)),
+                     Comparison = "ID Speech vs. AD Speech") %>% 
+bind_rows(., table_creator(final$speech_features, "")) %>%
+  bind_rows(., table_creator(final$speech_features, "ID Song vs. AD Song") %>% slice(1) %>%
+              mutate(across(c(2:7), ~ ifelse(TRUE, NA, NA)),
+                     Comparison = "ID Song vs. AD Song")) %>% 
+  bind_rows(., table_creator(final$song_features, " ")) %>%
+  kable(.,
+      "latex",
+      booktabs = TRUE,
+      longtable = TRUE,
+      col.names = c("Comparison","Feature","Statistic","$\\beta$","$SE$","$z$", "$p$"),
+      align = c("l","l","l","r","r","r","r"),
+      escape = FALSE,
+      linesep = linesep(c(1,1,2,1,2,1,1,1,2,
+                          1,1,2,1,2,1,1,1,2))) %>%
+  kable_styling(full_width = FALSE, # TRUE
+                font_size = 9,
+                latex_options = c("hold_position", "repeat_header")) %>%
+  row_spec(c(1,13), bold = TRUE) %>% 
+  row_spec(c(12), hline_after = TRUE) %>% 
+  footnote(general = "Regression results from confirmatory analyses (corresponding with the boxplots in Fig. 2). The features tested here were limited to those with significant differences in the exploratory analyses. Statistics are from post-hoc linear combinations following multi-level mixed-effects models. Abbreviations: infant-directed (ID); adult-directed (AD).",
+           general_title = "Extended Data Table 3.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           threeparttable = TRUE) %>%
+  column_spec(1, width = "1.7in") %>%
+  column_spec(2, width = "1.4in") %>%
+  column_spec(3:7, width = ".4in")
+
+# fixes the LaTeX for the subscript zero
+knitr::asis_output(str_replace_all(tmp, "_SUBZERO", "\\\\textsubscript{0}"))
+
+```
+
+\clearpage
+
+<!-- (fieldsite-wise mixed effects summary for acoustic analyses) -->
+```{r extended_table4, results = 'asis'}
+############################
+# 1. making some functions #
+############################
+
+extract_fieldsite_feat_diff <- function(feat, voc_x) {
+  mod <- final$full_mods[[feat]]
+  
+  fixed <- mod %>% tidy(conf.int = T) %>% filter(effect == "fixed") %>% select(infdir = term, estimate)
+  
+  # Extract out the random-effect slopes
+  random <- ranef(mod)$id_site %>% as_tibble %>%
+    mutate(fieldsite = rownames(ranef(mod)$id_site)) %>%
+    pivot_longer(names_to = "infdir", values_to = "ran_estimate", cols = c(1:4))
+  
+  combined <- random %>%
+    left_join(., fixed, by = "infdir") %>%
+    mutate(estimate = estimate + ran_estimate)
+  
+  output <- combined %>%  
+    select(-ran_estimate) %>%
+    pivot_wider(names_from = infdir, values_from = estimate)
+  
+  if (voc_x == "speech") {
+    output <- output %>% 
+      select(fieldsite, ID = voc_typeB, AD = voc_typeD)
+  } else if (voc_x == "song") {
+    output <- output %>% 
+      select(fieldsite, ID = voc_typeA, AD = voc_typeC)
+  }
+  
+  output <- output %>% 
+    group_by(fieldsite) %>% 
+    summarise(
+      {{feat}} := (ID - AD) %>% round(digits=2)
+    ) %>% 
+    left_join(., fieldsites %>% select(fieldsite, society), by = "fieldsite") %>% 
+    relocate(society, after = 0) %>% 
+    select(-fieldsite)
+  
+  return(output)
+}
+
+extract_order <- function(data) {
+  data %>% 
+  pivot_longer(names_to = "feature", values_to = "value", cols = c(2:12)) %>% 
+  mutate(positive = ifelse(value > 0, 1, 0)) %>% 
+  group_by(feature) %>% 
+  summarise(pct_pos = sum(positive) / n(),
+            pct_neg = 1 - pct_pos,
+            consistency = ifelse(pct_pos > pct_neg, pct_pos, pct_neg)) %>% 
+  arrange(desc(consistency)) %>% 
+  pull(feature)
+}
+
+my_palette <- colorspace::diverging_hcl(50, h = c(260, 0), c = 180, l = c(60, 95), power = 1)
+
+my_scale_colour <- function (x, na_color = "white", scale_from = NULL, palette) {
+  if (is.null(scale_from)) {
+    x <- round(rescale(x, c(1, 50)))
+  }
+  else {
+    x <- round(rescale(x, to = c(1, 50), from = scale_from))
+  }
+  color_code <- palette[x]
+  color_code[is.na(color_code)] <- na_color
+  return(color_code)
+}
+
+
+#####################
+# 2. preparing data #
+#####################
+
+speech_field_feats <- map(final$all$feature, ~ extract_fieldsite_feat_diff(.x, "speech")) %>% plyr::join_all(., type = "left", by = "society")
+song_field_feats <- map(final$all$feature, ~ extract_fieldsite_feat_diff(.x, "song")) %>% plyr::join_all(., type = "left", by = "society")
+
+
+speech_order <- extract_order(speech_field_feats)
+song_order <- extract_order(song_field_feats)
+
+format_table <- function(data, order) {
+  data %>% t() %>% as_tibble() %>% 
+  # fix columns
+  rename_all(~ data %>% pull(society)) %>% 
+  slice(2:100) %>% 
+  # fix feature row-names
+  mutate(`Acoustic Features` = tibble(feats = data %>% select(-society) %>% names) %>%
+          pull(feats), .before = 1) %>% 
+  mutate(across(-`Acoustic Features`, ~ as.numeric(.x))) %>% 
+  # re-order to match fig 2
+  slice(match(order, `Acoustic Features`)) %>% 
+  # make variable names pretty
+  recode_variable_names(., `Acoustic Features`) %>% 
+  mutate(`Acoustic Features` = str_replace(`Acoustic Features`, "%", "\\%"))
+}
+
+speech_table <- format_table(speech_field_feats, speech_order)
+song_table <- format_table(song_field_feats, song_order)
+
+#####################
+# 3. creating table #
+#####################
+
+song_table %>% slice(1) %>% mutate(
+  `Acoustic Features`  = "Speech",
+  across(c(2:22), ~ ifelse(is.numeric(.x), NA, .x))
+) %>% 
+  bind_rows(., speech_table) %>% 
+  bind_rows(., song_table %>% slice(1) %>% mutate(
+    `Acoustic Features`  = "Song",
+    across(c(2:22), ~ ifelse(is.numeric(.x), NA, .x))
+  )
+  ) %>% 
+  bind_rows(., song_table) %>% 
+  mutate(across(c(2:22), ~ .x %>% 
+                  cell_spec(.x, format = "latex", bold = T,
+                            background = my_scale_colour(.x, scale_from = c(-1.9, 1.9), palette = my_palette), 
+                            color = "black")),
+         `Acoustic Features` = cell_spec(`Acoustic Features`, format = "latex")) %>% 
+  mutate(across(c(2:22), ~ str_replace(.x, "NA", " "))) %>% 
+  kable(.,
+        format = "latex",
+        booktabs = TRUE,
+        escape = FALSE,
+        col.names = speech_table %>% names %>% str_replace("&", "\\\\&"),
+        linesep = ""
+  ) %>%
+  kable_styling(font_size = 5) %>%
+  row_spec(c(1, 13), bold = TRUE) %>% 
+  row_spec(c(12), hline_after = TRUE) %>% 
+  footnote(general = "Estimated differences between infant-directed and adult-directed vocalizations, for acoustic feature, in each fieldsite (corresponding with the doughnut plots in Fig. 2). The estimates are derived from the random-effect components of the mixed-effects model reported in the Main Text. Cells of the table are shaded to facilitate the visibility of corpus-wide consistency (or inconsistency): redder cells represent features where infant-directed vocalizations have higher estimates than adult-directed vocalizations and bluer cells represent features with the reverse pattern. Within speech and song, acoustic features are ordered by their degree of cross-cultural regularity; some features showed the same direction of effect in all 21 societies (e.g., for speech, median pitch and pitch variability), whereas others were more variable.",
+           general_title = "Extended Data Table 4",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           escape = FALSE,
+           threeparttable = TRUE) %>%
+  column_spec(1, width = "1.4in") %>%
+  column_spec(2:22, width = ".2in") %>%
+  row_spec(0, angle = 65) %>% 
+  landscape()
+
+```
+
+
+\clearpage
+
+```{r extended_table5, results='asis'}
+
+read_csv(here("viz", "tables", "ED-table5.csv")) %>%
+  filter(Soothe == 1) %>%
+  mutate(AD_desc = case_when(
+    grepl("love", AD_desc, ignore.case = T) ~ "Love Song",
+    grepl("(Melancholy)|(Somber)|(Lone)", AD_desc) ~ "Sad Song",
+    TRUE ~ AD_desc
+  )) %>%
+  count(AD_desc, sort = T) %>%
+  kable(.,
+      format = "latex",
+      booktabs = TRUE,
+      col.names = c("Song type", "Number of songs"),
+      linesep = "\\addlinespace") %>%
+  kable_styling(font_size = 9) %>%
+  footnote(general = "Adult-directed songs with descriptions rated as \`\`soothing\" by two independent annotators. A mixed-effects model estimating the difference in perceived infant-directedness across these vs. other adult-directed songs, adjusting for fieldsite-wise variability, found no statistically significant difference in responses ($b = -0.011, p = .13$).",
+           general_title = "Extended Data Table 5.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           escape = FALSE,
+           threeparttable = TRUE)
+
+#### This code is for running the test described in the caption: ###
+# test <- read_csv(here("viz", "tables", "ED-table5.csv")) %>%
+#   rename(id = Stimulus) %>%
+#   select(id, soothe = Soothe)
+#
+# lmer(inf_guess ~ soothe + (1|fieldsite), trial_data %>% filter(voc_type == "C") %>%
+#      left_join(., test, by = "id") %>% drop_na(soothe)) %>% summary
+
+```
+
+\clearpage
+
+<!-- Extended Data Table 6 HERE  -->
+```{r extended_table6, results='asis'}
+
+n_vocalists <- task$d$voc %>%
+  mutate(fieldsite = str_sub(id, 1,3)) %>%
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite") %>%
+  group_by(sung) %>%
+  count(fieldsite) %>%
+  pivot_wider(names_from = sung, values_from = n) %>%
+  mutate(across(c(song, speech), ~ ifelse(is.na(.x), 0, .x)))
+
+extract_site_estimates(task$d$mod, "sungsong", 0) %>%
+  bind_rows(., extract_site_estimates(task$d$mod, "sungspeech", 0)) %>%
+  mutate(level = str_remove(level, ":.*")) %>% 
+  left_join(., fieldsite_codes, by = c("level" = "fieldsite")) %>%
+  left_join(., n_vocalists, by = c("level" = "fieldsite")) %>%
+  filter(grp == "fieldsite:region") %>%
+  select(society, sung = variable, d_prime = estimate, lb, ub, speech, song) %>%
+  mutate(across(c(d_prime, lb, ub), ~ format(round(.x, 3), nsmall = 3)),
+         conf_95 = paste0("[", lb, " ", ub, "]")) %>%
+  select(society, sung, d_prime, conf_95, speech, song) %>%
+  pivot_wider(names_from = sung, values_from = c(d_prime, conf_95)) %>%
+  ungroup() %>%
+  select(society, d_prime_sungspeech, conf_95_sungspeech, speech, d_prime_sungsong, conf_95_sungsong, song) %>%
+  mutate(across(c(d_prime_sungspeech, conf_95_sungspeech), ~ ifelse(speech == 0, "NA", .x)),
+         across(c(d_prime_sungsong, conf_95_sungsong), ~ ifelse(song == 0, "NA", .x))) %>%
+  kable(.,
+      "latex",
+      booktabs = TRUE,
+      longtable = TRUE,
+      escape = FALSE,
+      linesep = "\\addlinespace",
+      col.names = c(
+        "Fieldsite", "$d'$", "95\\% CI", "$n$", "$d'$", "95\\% CI", "$n$")) %>%
+  add_header_above(c(" ", "Speech" = 3, "Song" = 3)) %>%
+  kable_styling(font_size = 10) %>%
+  footnote(general = "Estimated fieldsite-wise \\\\textit{d}-prime values, quantifying sensitivity to infant-directedness in speech and song, independent of response bias. Values are estimated as coefficients from mixed-effects model predicting $d'$ from vocalization type, with random effects of fieldsite for each vocalization type. \\\\textit{n} refers to the number of vocalists that had a complete pair of vocalizations in the listener experiment (e.g., where one or both of the infant- and adult-directed vocalizations were not excluded due to confounds). Due to the strict exclusion procedure (see Methods), some fieldsites have very small samples, complicating the interpretation of these results, and one fieldsite had no observations for song. These exclusions only apply to the naïve listener experiment, however, and not the acoustic analyses reported elsewhere in this paper.",
+           general_title = "Extended Data Table 6.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           threeparttable = TRUE,
+           escape = FALSE) %>%
+  column_spec(1, width = "1.2in") %>%
+  column_spec(2, width = ".6in") %>%
+  column_spec(3, width = ".85in") %>%
+  column_spec(4, width = ".5in") %>%
+  column_spec(5, width = ".6in") %>%
+  column_spec(6, width = ".85in") %>%
+  column_spec(7, width = ".5in")
+
+```
+
+
+\clearpage
+
+```{r extended_table7, results='asis'}
+
+options(knitr.kable.NA = '')
+read_csv(here("viz", "tables", "ED-table7.csv")) %>%
+  kable(.,
+      format = "latex",
+      booktabs = TRUE,
+      linesep = "\\addlinespace") %>%
+  kable_styling(font_size = 9) %>%
+  row_spec(c(1,6,14,18), bold = TRUE) %>% 
+  row_spec(c(5,13,17), hline_after = TRUE) %>% 
+  footnote(general = "Demographics of United States participants. See notes and corresponding analyses in SI Text 1.5.",
+           general_title = "Extended Data Table 7.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           escape = FALSE,
+           threeparttable = TRUE)
+
+```
+
+\clearpage
+```{r extended_table8, results = 'asis'}
+
+pca_thing <- function(PC) {
+  PCA2 %>%
+    # extract rotation matrix
+    tidy(matrix = "rotation") %>%
+    pivot_wider(
+      names_from = "PC", values_from = "value",
+      names_prefix = "PC"
+    ) %>%
+    select(column, {{ PC }}) %>%
+    mutate(
+      neg = ifelse({{ PC }} < 0, 1, 0) %>% as_factor,
+      {{ PC }} := {{ PC }},
+      column = fct_reorder(column, abs({{ PC }}))
+    ) %>%
+  select(feat = column, {{ PC }}) %>%
+  arrange(desc(abs({{ PC }}))) %>%
+  slice(1:30)
+}
+
+table_data <- pca_thing(PC1) %>%  
+  bind_cols(., pca_thing(PC2)) %>%
+  bind_cols(., pca_thing(PC3)) %>%
+  rename(pc1_feat = 1, pc1_value = 2,
+         pc2_feat = 3, pc2_value = 4,
+         pc3_feat = 5, pc3_value = 6) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
+
+names <- read_csv(here("viz", "tables", "var_names.csv"))
+stats <- read_csv(here("viz", "tables", "stat_names.csv"))
+whole_names <- read_csv(here("viz", "tables", "whole_names.csv"))
+
+for (i in 1:nrow(names)) {
+  table_data <- table_data %>% 
+    mutate(
+      across(contains("feat"), 
+             ~ str_replace_all(.x,
+               names$Stub[[i]], 
+               paste0(names$Label[[i]], "_")
+             ))
+    )
+}
+
+for (i in 1:nrow(whole_names)) {
+  table_data <- table_data %>% 
+    mutate(
+      across(contains("feat"), 
+             ~ str_replace_all(.x,
+                               paste0(whole_names$Stub[[i]], ""), 
+                               whole_names$Name[[i]]
+             ))
+    )
+}
+
+for (i in 1:nrow(stats)) {
+  table_data <- table_data %>% 
+    mutate(
+      across(contains("feat"), 
+             ~ str_replace_all(.x,
+                               paste0(stats$Stub[[i]], ""), 
+                               paste0(" (", stats$Name[[i]], ")")
+             ))
+    )
+}
+
+kable(table_data,
+      format = "latex",
+      booktabs = TRUE,
+      col.names = c("Feature", "Weighting", "Feature", "Weighting", "Feature", "Weighting"),
+      linesep = "\\addlinespace",
+      longtable = TRUE) %>%
+  add_header_above(c("Principal Component 1" = 2, "Principal Component 2" = 2, "Principal Component 3" = 2)) %>%
+  kable_styling(font_size = 7) %>%
+  footnote(general = "Factor loadings for the top three principal components reported in Extended Data Fig. 3.",
+           general_title = "Extended Data Table 8.",
+           footnote_as_chunk = TRUE,
+           title_format = "bold",
+           escape = FALSE,
+           threeparttable = TRUE) %>%
+  column_spec(1, width = "1.4in") %>%
+  column_spec(2, width = ".5in") %>%
+  column_spec(3, width = "1.4in") %>%
+  column_spec(4, width = ".5in") %>%
+  column_spec(5, width = "1.4in") %>%
+  column_spec(6, width = ".5in")
+
+```
+
+\clearpage
+
+# References

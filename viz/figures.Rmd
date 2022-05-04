@@ -1,0 +1,1561 @@
+---
+author: "Courtney B. Hilton"
+date: "21/02/2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+<!-- setup -->
+```{r fig_chunk_knit_settings, include=F}
+
+full_run <- ifelse(exists("full_run"), full_run, FALSE) #i.e., enabling this to be set by manuscript.rmd, otherwise, just defaulting to false.
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+if (exists("full_run") & full_run == TRUE) {knitr::opts_chunk$set(include=FALSE)}
+options(scipen = 999) # disable scientific notation
+
+```
+
+```{r fig_load_libraries_and_functions, include=F}
+
+# Load libraries
+pacman::p_load(
+  car,
+  colorspace,
+  glue,
+  countrycode,
+  ggeffects,
+  ggnewscale,
+  ggpubr,
+  ggridges,
+  ggsignif,
+  ggtext,
+  here,
+  pROC,
+  Hmisc,
+  janitor,
+  knitr,
+  lme4,
+  lmerTest,
+  lsr,
+  magick,
+  grid,
+  multcomp,
+  patchwork,
+  png,
+  rgeos,
+  gtable, 
+  rnaturalearth,
+  rnaturalearthdata,
+  sf,
+  sjPlot,
+  skimr,
+  conflicted
+)
+
+# IF this script is being run separately from manuscript.Rmd, then also load these functions:
+if (full_run == FALSE) {
+    pacman::p_load(
+      here, 
+      broom,
+      broom.mixed,
+      scales,
+      skimr,
+      tidyverse
+    )
+}
+
+# finally, make sure there are no namespace conflicts (since packages may have been loaded in different orders)
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("summarise", "dplyr")
+conflict_prefer("lmer", "lmerTest")
+conflict_prefer("lag", "dplyr")
+conflict_prefer("recode", "dplyr")
+
+
+catcolors <- c("#fd7f23",  "#fd471e", "#85c1e7", "#1684fc")
+
+source(here("analysis", "functions.R"))
+
+```
+
+```{r setting-fig-output, include=F}
+opts_chunk$set(fig.path = here("viz", "figures", ""))
+```
+
+```{r loading-data, include=F}
+load(here("results", "analyses.RData"))
+load(here("results", "lasso_results.Rdata"))
+load(here("results", "human_lasso.RData"))
+```
+
+<!-- Fig. 1 | Corpus map + lasso results -->
+```{r fig1-map, fig.width=12, fig.height=4}
+map_info <- read_csv(here("data", "fig1-societyInfo.csv")) %>%
+  mutate(culture = str_replace(culture,"Sapara","Sápara"),
+         soc_type = case_when(
+           urban == 1 ~ "urban",
+           identifier %in% c("LIM", "VAN", "MES", "ACO", "QUE") ~ "rural",
+           TRUE ~ "small-scale"
+         ),
+         # jittering the Afrocolombians site point, so you can see it
+         across(c(lat, long), ~ ifelse(culture == "Afrocolombians", .x + 1, .x))) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326) %>%
+  mutate(soc_type = factor(soc_type, levels = c("urban", "rural", "small-scale")))
+countries <- trial_data %>%
+  count(country, sort = TRUE) %>%
+  # ensuring names match the map
+  mutate(country = case_when(
+    country == "The Netherlands" ~ "Netherlands",
+    country == "Russia" ~ "Russian Federation",
+    country == "South Korea" ~ "Republic of Korea",
+    TRUE ~ country
+    ))
+
+world <- ne_countries(scale = "medium", returnclass = "sf") %>%
+  filter(iso_a3 != "ATA") %>% # removing antartica
+  left_join(., countries, by = c("name_long" = "country")) %>%
+  select(name = name_long, n, geometry) %>%
+  mutate(n = ifelse(is.na(n), 0, n))
+
+langfam_colors <- c('#8a3ffc','#33b1ff','#ffff33','#ff0873','#ff308a','#ff57a0','#ff7eb6','#ffa5cc','#6fdc8c','#2ca25f','#b3de69','#d2a106','#b28600','#ba4e00', 'red')
+
+map_recordings <- ggplot(world) +
+  geom_sf(fill = "grey80", color = "grey70", lwd = .1) +
+  geom_sf(
+    data = map_info,
+    aes(geometry = geometry, fill = langfam, shape = soc_type),
+    alpha = 0.9,
+    size = 2.5
+  ) +
+  scale_shape_manual(
+    values = c(22,24,21),
+    name = "Type"
+  ) +
+  scale_fill_manual(
+    values = langfam_colors,
+    name = "Language Family"
+  ) +
+  guides(
+    fill = guide_legend(override.aes = list(fill = langfam_colors,
+                                            pch = 21, color = "black"),
+                        title.position="top", title.hjust = 0.5, keywidth = 2, keyheight = 0.7,
+                        nrow=4, byrow=TRUE),
+    shape = guide_legend(override.aes = list(fill = "black"),
+                        title.position="top", title.hjust = 0.5,keywidth = 2, keyheight = 0.7)
+  ) +
+  coord_sf() +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 8)
+  )
+
+```
+
+```{r fig1-lasso}
+
+classifier_plotter <- function(data, voc_type_var, fill_color, y_lab) {
+  data %>%
+    mutate(inf_dir = ifelse(str_detect(actual_type, "infant"), 1, 0)) %>%
+    rename(inf_prob = contains("infant")) %>%
+    group_by(id_site) %>%
+    summarise(roc = list(roc(inf_dir, inf_prob, percent=TRUE, ci=TRUE, quiet = TRUE)$ci %>% as.numeric)) %>%
+    rowwise() %>%
+    summarise(
+      id_site = id_site,
+      auc = roc[[2]],
+      conf.low = roc[[1]],
+      conf.high = roc[[3]],
+      voc_type = voc_type_var
+    ) %>%
+    ungroup() %>%
+    mutate(across(where(is.numeric), ~ .x / 100)) %>%
+    ggplot(., aes(x = voc_type, y = auc, fill = voc_type)) +
+    stat_summary(geom = "bar", fun = "mean", alpha = .6) +
+    # geom_pointrange(aes(ymin = conf.low, ymax = conf.high), position = position_jitter(width = .2, seed = 271), size = 0.6, pch = 21, alpha = .8) +
+    geom_point(position = position_jitter(width = .2, seed = 271), size = 1.5, pch = 21, alpha = .8) +
+    geom_hline(yintercept = .5, lty = "dashed", size = .7) +
+    stat_summary(geom = "linerange", fun.data = "mean_cl_normal", size = .7, color = "black") +
+    scale_fill_manual(values = fill_color) +
+    scale_y_continuous(labels = percent) +
+    scale_x_discrete(labels = voc_type_var, position = "top") +
+    labs(y = y_lab, x = NULL) +
+    coord_cartesian(ylim = c(0, 1)) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          panel.grid.major.x = element_blank(),
+          axis.text.x.top = element_text(size = 12))
+}
+
+speech_classifier <- classifier_plotter(speech_LASSO$lasso_predictions, "Speech", catcolors[1], "Performance (% AUC)")
+song_classifier <- classifier_plotter(song_LASSO$lasso_predictions, "Song", catcolors[3], NULL)
+
+variable_importance_plotter <- function(data, feat_labels, color, x_lim) {
+  data %>%
+  slice(1:6) %>% # taking top 6 features
+  mutate(labels = feat_labels) %>%
+  ggplot(., aes(y = Variable, x = Importance)) +
+  geom_col(fill = color, alpha = 0.6) +
+  labs(y = NULL, x = "Variable Importance (z-score)") +
+  ggtext::geom_richtext(aes(label = labels, x = Importance + 0.03), hjust = 0, size = 3,
+                        fill = NA, label.color = NA, label.padding = grid::unit(rep(0, 4), "pt")) +
+  coord_cartesian(xlim = c(0,x_lim), clip = "off") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.major.x = element_line(size = 0.2)
+  )
+}
+
+speech_variable <- variable_importance_plotter(speech_LASSO$var_import_data, 
+                                               # c(
+                                               #   "<i style='color: green;'>\u25B2</i> Pitch (Median)",
+                                               #   "<i style='color: green;'>\u25B2</i> Vowel Travel Rate (Median)",
+                                               #   "<i style='color: green;'>\u25B2</i> Pitch (IQR)",
+                                               #   "<i style='color: green;'>\u25B2</i> Second Formant (Median)",
+                                               #   "<i style='color: red;'>\u25BC</i> Energy Roll-off (85th %-ile)",
+                                               #   "<i style='color: green;'>\u25B2</i> Pulse Clarity"
+                                               # ), 
+                                               c(
+                                                 "<i style='color: green;'>\u25B2</i> Pitch (Median)",
+                                                 "<i style='color: green;'>\u25B2</i> Vowel Travel Rate (Median)",
+                                                 "<i style='color: green;'>\u25B2</i> Pitch (IQR)",
+                                                 "<i style='color: green;'>\u25B2</i> Pulse Clarity",
+                                                 "<i style='color: green;'>\u25B2</i> Attack Curve Slope (Median)",
+                                                 "<i style='color: green;'>\u25B2</i> Second Formant (Median)"
+                                               ),
+                                               catcolors[1], 
+                                               3.2)
+
+song_variable <- variable_importance_plotter(song_LASSO$var_import_data, 
+                                             # c(
+                                             #   "<i style='color: green;'>\u25B2</i> Vowel Travel (IQR)",
+                                             #   "<i style='color: red;'>\u25BC</i> Intensity (Median)",
+                                             #   "<i style='color: red;'>\u25BC</i> Roughness (Median)",
+                                             #   "<i style='color: red;'>\u25BC</i> Attack Curve Slope (Median)",
+                                             #   "<i style='color: red;'>\u25BC</i> Inharmonicity",
+                                             #   "<i style='color: red;'>\u25BC</i> Second Formant (IQR)"
+                                             # ),
+                                             c(
+                                               "<i style='color: green;'>\u25B2</i> Vowel Travel (IQR)",
+                                               "<i style='color: red;'>\u25BC</i> Intensity (Median)",
+                                               "<i style='color: red;'>\u25BC</i> Roughness (Median)",
+                                               "<i style='color: red;'>\u25BC</i> Attack Curve Slope (Median)",
+                                               "<i style='color: red;'>\u25BC</i> Second Formant (IQR)",
+                                               "<i style='color: red;'>\u25BC</i> Energy Roll-off (85th %-ile)"
+                                             ),
+                                             catcolors[3], 
+                                             3.2)
+
+```
+
+```{r rev2-fig1, fig.width=10, fig.height=8, dev='quartz_pdf'}
+
+
+layout <- "
+AAAAAAAAAAAA
+AAAAAAAAAAAA
+BCCCCCDEEEEE
+"
+
+map_recordings + speech_classifier + speech_variable + song_classifier + song_variable +
+  plot_layout(design = layout) +
+  plot_annotation(tag_levels = list(c("a", "b", "", "", "")))
+
+```
+
+<!-- Fig. 2 | Acoustic features -->
+```{r rev2-fig2, fig.height=5, fig.width=8}
+
+
+feat_labels <- c("Pitch (Median)", "Pitch (IQR)", "Intensity (Median)", "Energy Roll-off (85th %ile)",
+                 "Vowel Travel (IQR)", "Vowel Travel Rate (Median)", "Vowel Travel Rate (IQR)",
+                 "Roughness (Median)", "Roughness (IQR)", "Inharmonicity", "Pulse Clarity") %>% rev
+
+feat_order <- c("praat_f0_median", "praat_f0_IQR", "praat_intensity_median",
+                "mir_rolloff85", "praat_voweltravel_IQR", "praat_voweltravel_rate_median_log", "praat_voweltravel_rate_IQR_log",
+                "mir_roughness_med_log", "mir_roughness_iqr_log", "mir_inharmonicity", "mir_pulseclarity_log")
+
+######################
+# 2. boxplot figures #
+######################
+
+plot_data <- final$plot %>%
+  mutate(z = as.vector(z)) %>%
+  drop_na(z) %>%
+  mutate(z = ifelse(song == "song",
+                    z + 9, z),
+         p.val = ifelse(song == "song", song_features, speech_features),
+         voc_type = str_sub(id, 6,6),
+         voc_type = factor(voc_type, levels = c("B", "D", "A", "C"))) %>%
+    mutate(stars = case_when(
+      p.val > .05 ~ "",
+      between(p.val, .01, .05) ~ "*",
+      between(p.val, .001, .01) ~ "**",
+      p.val < .001 ~ "***"
+    ),
+    star_y = ifelse(song == "speech", 2.45, 6.55)) %>%
+    mutate(feat = fct_relevel(feat, feat_order %>% rev))
+
+label_data <- tibble(feat = feat_order, feat_labels = feat_labels %>% rev)
+
+fig3a1 <- ggplot() +
+  geom_hline(yintercept = c(0, 9),
+             linetype = "dotted",
+             alpha = .6) +
+  geom_boxplot(data = plot_data %>% filter(song == "speech"), aes(x = feat, y = z, fill = voc_type %>% factor(., levels = c("D", "B")), alpha = p.val > .05),
+               color = "black",
+               notch = TRUE,
+               outlier.shape = NA,
+               lwd = 0.2) +
+  geom_boxplot(data = plot_data %>% filter(song == "song"), aes(x = feat, y = z, fill = voc_type %>% factor(., levels = c("C", "A")), alpha = p.val > .05),
+               color = "black",
+               notch = TRUE,
+               outlier.shape = NA,
+               lwd = 0.2) +
+  geom_text(data = plot_data, aes(x = as.numeric(feat) - 0.1, label = stars, y = star_y)) +
+  geom_label(data = label_data, aes(y = 4.5, x = feat, label = feat_labels), size = 2.5, fill = "white",
+             label.padding = unit(0.1, "lines"), label.size = NA) +
+  annotate("richtext", x = 12.5, y = 0.1,
+           label = glue("<b style='color:{adjust_transparency('#fd7f23', .8)};'>ID Speech</b> vs. <b style='color:{adjust_transparency('#fd471e', .8)};'>AD Speech</b>"),
+           fill = NA, label.color = NA) +
+  annotate("richtext", x = 12.5, y = 9.1,
+           label = glue("<b style='color:{adjust_transparency('#85c1e7', .8)};'>ID Song</b> vs. <b style='color:{adjust_transparency('#1684fc', .8)};'>AD Song</b>"),
+           fill = NA, label.color = NA) +
+  annotate("text", x = 12.5, y = 4.5, label = "(Cross-site Consistency)", size = 2.5, color = "grey40") +
+  annotate("segment", x = 12.1, xend = 11.4, y = 3.5, yend = 3,
+           arrow = arrow(length = unit(0.01, "npc"))) +
+  annotate("segment", x = 12.1, xend = 11.4, y = 5.5, yend = 6,
+           arrow = arrow(length = unit(0.01, "npc"))) +
+  scale_fill_manual(values = catcolors, breaks = c("B", "D", "A", "C")) +
+  scale_alpha_manual(values = c(0.8, 0)) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(colour = "black",
+                               size = 12),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  ) +
+  scale_x_discrete(limits = feat_order %>% rev,
+                   labels = feat_labels) +
+  scale_y_continuous(breaks = seq(-2,11,1),
+                     labels = c(seq(-2,2,1) %>% as.character," "," ", "", " ",seq(-2,2,1) %>% as.character)) +
+  labs(x = NULL, y = NULL) +
+  coord_flip(clip = "off", ylim = c(-2,11), xlim = c(1,final$all$feature %>% length)) +
+  theme(plot.title = ggtext::element_markdown(hjust = .5),
+        axis.text.y = element_blank(),
+        axis.text.x = element_text(size = 9),
+        plot.margin = unit(c(50,5,5,5), "pt")
+        )
+
+#########################
+# 3. Add doughnut plots #
+#########################
+
+doughnut_plotter <- function(color_x, voc_x) {
+  
+  proportions <- tibble()
+  
+  for (feat_x in final$all$feature) {
+    mod <- final$full_mods[[feat_x]]
+    
+    fixed <- mod %>% tidy(conf.int = T) %>% filter(effect == "fixed") %>% select(infdir = term, estimate)
+    
+    # Extract out the random-effect slopes
+    random <- ranef(mod)$id_site %>% as_tibble %>%
+      mutate(fieldsite = rownames(ranef(mod)$id_site)) %>%
+      pivot_longer(names_to = "infdir", values_to = "ran_estimate", cols = c(1:4))
+    
+    combined <- random %>%
+      left_join(., fixed, by = "infdir") %>%
+      mutate(estimate = estimate + ran_estimate)
+    
+    output <- combined %>%  
+      select(-ran_estimate) %>%
+      pivot_wider(names_from = infdir, values_from = estimate)
+    
+    if (voc_x == "speech") {
+      output <- output %>% 
+        select(fieldsite, ID = voc_typeB, AD = voc_typeD)
+    } else if (voc_x == "song") {
+      output <- output %>% 
+        select(fieldsite, ID = voc_typeA, AD = voc_typeC)
+    }
+    
+    output <- output %>% 
+      mutate(inf_higher = ifelse(ID > AD, 1, 0)) %>%
+      summarise(ID = sum(inf_higher) / n(),
+                AD = 1 - ID,
+                feat = feat_x)
+    
+    sig <- final$all %>% 
+      filter(feature == feat_x) %>% 
+      select(contains(voc_x)) %>% 
+      rename(sig = 1) %>% 
+      summarise(sig = ifelse(sig < 0.05, 1, 0))
+    
+    output <- output %>% bind_cols(., sig)
+    
+    proportions <- bind_rows(proportions, output)
+  }
+  
+  doughnut <- proportions %>%
+    pivot_longer(cols = c("ID","AD"), names_to = "voc", values_to = "proportion") %>%
+    group_by(feat) %>%
+    mutate(ymax = cumsum(proportion),
+           ymin = lag(ymax, n = 1, default = 0),
+           feat = factor(feat, levels = feat_order)) %>%
+    arrange(desc(proportion)) %>% mutate(rank = row_number()) %>%
+    mutate(rank = ifelse(sig == 0, 2, rank),
+           rank =  factor(rank, levels = c("1", "2"))) %>%
+    ggplot(., aes(ymax = ymax, ymin = ymin, xmax = 4, xmin = 3, fill = voc, alpha = rank, color = factor(sig, levels = c(0,1)))) +
+    geom_rect(size = .3) +
+    scale_alpha_manual(values = c(.8, 0)) +
+    scale_color_manual(values = c("white", "black")) +
+    coord_polar(theta = "y") +
+    scale_fill_manual(values = color_x) +
+    facet_wrap(vars(feat), ncol = 1) +
+    xlim(c(2,4)) +
+    theme_void() +
+    theme(legend.position = "none",
+          strip.text = element_blank(),
+          plot.title = element_text(hjust = 1.5),
+          plot.margin = margin(0,0,1,0))
+  
+  return(doughnut)
+}
+
+####################
+# 4. Combine Plots #
+####################
+
+fig3 <- fig3a1 +
+  inset_element(doughnut_plotter(c("#fd471e", "#fd7f23"), "speech"),
+                .255,0.015,.535,.98, ignore_tag = TRUE) +
+  inset_element(doughnut_plotter(c("#1684fc", "#85c1e7"), "song"),
+                .455,0.015,.755,.98, ignore_tag = TRUE)
+
+fig3
+
+```
+
+<!-- Fig. 3 | Listener experiment results -->
+```{r rev2-fig3, fig.width=8, fig.height=7}
+
+field_d_plotter <- function(mod, voc_type, plot_col, title_var) {
+  fixed <- mod %>% tidy() %>%
+    filter(term == voc_type) %>%
+    select(d_prime = estimate) %>% pull(d_prime)
+  
+  random <- augment(ranef(mod), interval = "confidence", ci.level = 0.95) %>% tibble %>%
+    filter(variable == voc_type) %>%
+    rename(lb95 = lb, ub95 = ub)
+  random80 <- augment(ranef(mod), interval = "confidence", ci.level = 0.80) %>% tibble %>%
+    filter(variable == voc_type) %>%
+    select(lb80 = lb, ub80 = ub, grp, variable, level)
+  random50 <- augment(ranef(mod), interval = "confidence", ci.level = 0.50) %>% tibble %>%
+    filter(variable == voc_type) %>%
+    select(lb50 = lb, ub50 = ub, grp, variable, level)
+  random <- random %>%
+    left_join(., random80) %>%
+    left_join(., random50)
+  
+  combined <- random %>%
+    mutate(intercept = fixed,
+           across(c(estimate, contains("lb"), contains("ub")), ~ .x + intercept)) %>%
+    mutate(above_zero = ifelse(lb95 > 0, 1, 0))
+  
+  fix_extractor <- function(conf.level) {
+    low.label <- paste0("lb", str_extract(format(conf.level, nsmall = 2), "\\d\\d"))
+    high.label <- paste0("ub", str_extract(format(conf.level, nsmall = 2), "\\d\\d"))
+    mod %>% tidy(conf.int = TRUE, conf.level = conf.level) %>%
+      filter(effect == "fixed", term == voc_type) %>%
+      select(grp = effect, term, estimate,
+             {{low.label}} := conf.low,
+             {{high.label}} := conf.high) %>%
+      mutate(society = "Overall", variable = voc_type, level = str_remove(voc_type, "sung"))
+  }
+  
+  fixed95 <- fix_extractor(0.95)
+  fixed80 <- fix_extractor(0.80)
+  fixed50 <- fix_extractor(0.50)
+  fixed <- plyr::join_all(list(
+    fixed95,
+    fixed80,
+    fixed50
+  ), type = "left")
+  
+  test <- combined %>%
+    mutate(level = str_remove(level, ":.*")) %>%
+    left_join(., fieldsite_codes, by = c("level" = "fieldsite")) %>%  
+    bind_rows(., fixed)
+  
+  # this code removes the Enga site from the plot, since it has no data
+  if (voc_type == "sungsong") {
+    test <- test %>% 
+      filter(level != "PNG")
+  }
+  
+  
+  data <- test %>%
+    filter(grp %in% c("fieldsite:region", "fixed"), variable == voc_type) %>%
+    mutate(level = fct_reorder(level, estimate),
+           level = factor(level, levels = c(levels(level), "blank")),
+           level = fct_relevel(level, str_remove(voc_type, "sung"), after = Inf))
+  
+  # this code removes the Enga site from the plot, since it has no data
+  if (voc_type == "sungsong") {
+    data <- data %>% 
+      mutate(level = factor(level, levels = c("blank2", levels(level))))
+  }
+  
+  p <- ggplot(data %>% filter(grp == "fieldsite:region"), aes(x = estimate, y = level)) +
+    geom_point() +
+    # 50% CI
+    geom_rect(aes(xmin = lb50, xmax = ub50,
+                  ymin = as.numeric(level) - 0.5, ymax = as.numeric(level) + 0.5),
+              fill = plot_col, size = 2, alpha = 0.6) +
+    # 80% CI
+    geom_rect(aes(xmin = lb80, xmax = ub80,
+                  ymin = as.numeric(level) - 0.5, ymax = as.numeric(level) + 0.5),
+              fill = plot_col, size = 2, alpha = 0.5) +
+    # 95% CI
+    geom_rect(aes(xmin = lb95, xmax = ub95,
+                  ymin = as.numeric(level) - 0.5, ymax = as.numeric(level) + 0.5),
+              fill = plot_col, size = 2, alpha = 0.2) +
+    geom_point() +
+    geom_linerange(data = data %>% filter(grp == "fixed"),
+                   aes(xmin = lb95, xmax = ub95),
+                   color = plot_col, size = 1) +
+    geom_point(data = data %>% filter(grp == "fixed"),
+               color = "black", pch = 18, size = 4) +
+    geom_text(data = data %>% filter(grp == "fixed"),
+              aes(label = society, x = ub95 + 0.1), hjust = 0, size = 4) +
+    geom_text(aes(label = society, x = ub95 + 0.1), hjust = 0, size = 2.5) +
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "black") +
+    scale_y_discrete(drop = FALSE) +
+    labs(
+      x = "Sensitivity (d')",
+      y = NULL,
+      title = title_var
+    ) +
+    coord_cartesian(xlim = c(-.4, 4), clip = "off") +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      axis.text.y = element_blank(),
+      strip.text = element_blank(),
+      panel.grid = element_blank(),
+      plot.title = element_markdown(hjust = 0.5)
+    )
+  return(p)
+}
+
+
+mod <- task$d$lang %>%
+  mutate(fieldsite = str_sub(id, 1,3)) %>%
+  left_join(., fieldsites %>% select(fieldsite, region), by = "fieldsite") %>% 
+  mutate(lang_similarity = factor(lang_similarity, levels = c("unrelated", "same_fam", "same_lang")),
+         lang_similarity = fct_recode(lang_similarity, Unrelated = "unrelated",
+                                      `Same\nLanguage\nFamily` = "same_fam",
+                                      `Same\nLanguage` = "same_lang")) %>%
+  lmer(d_prime ~ sung + 0 + lang_similarity + (0 + sung|region/fieldsite), .,
+       control = lmerControl(optimizer ="Nelder_Mead"))
+
+
+d_lang_plot <- plot_model(mod, type = "pred", terms = c("lang_similarity", "sung")) +
+  labs(title = NULL,
+       x = NULL,
+       y = "Sensitivity (d')") +
+  geom_line(aes(group = group), position = position_dodge(width = .1)) +
+  geom_hline(yintercept = 0, lty = "dashed", color = "black", alpha = .5) +
+  scale_color_manual(values = catcolors[c(1,3)] %>% rev) +
+  coord_cartesian(ylim = c(0,2.5), clip = "off") +
+  theme_bw() +
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_line(linetype = "dotted"),
+        aspect.ratio = 1,
+        axis.ticks.x = element_line()
+  )
+
+
+# Note (from CBH): to get the legends to align properly I have to do this convoluted solution below:
+
+map_listeners <- ggplot(world, aes(fill = log(n))) +
+  geom_sf(lwd = .1, color = "grey70") +
+  scale_fill_gradient(
+    low = "white",
+    high = "#35bda9",
+    breaks = seq(0,10.4631,10.4631/4),
+    labels = c("0","15","200","2,500","35,000"),
+    na.value = 0,
+    limits = c(0,10.5),
+    guide = guide_colorbar(order = 1, label.hjust = 1, frame.colour = "grey70", ticks.colour = "grey70", direction = "horizontal")
+  ) +
+  new_scale_fill() +
+  geom_sf(data = world %>% filter(name == "United States"), aes(fill = name), lwd = .1, color = "grey70") +
+  scale_fill_manual(labels = "200,000", values = "#2a9d8f", guide = guide_legend(order = 2, keyheight = 1,
+                                                                                 label.position = "bottom",
+                                                                                 label.vjust = .6)) +
+  coord_sf() +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    legend.text = element_text(angle = 30),
+    legend.key.height=unit(.5, "cm"),
+    legend.box = "horizontal",
+    plot.margin = unit(c(5,5,50,5), "pt")
+    )
+
+
+# create log scale
+test <- ggplot(world, aes(fill = log(n))) +
+  geom_sf(lwd = .1, color = "grey70") +
+  scale_fill_gradient(
+    low = "white",
+    high = "#35bda9",
+    breaks = seq(0,10.4631,10.4631/4),
+    labels = c("0","15","200","2,500","35,000"),
+    na.value = 0,
+    limits = c(0,10.5),
+    guide = guide_colorbar(order = 1, label.hjust = 1, frame.colour = "grey70", ticks.colour = "grey70", direction = "horizontal")
+  ) +
+  coord_sf() +
+  theme_void() +
+  theme(
+    legend.position = c(0.7, -0.4),
+    legend.title = element_blank(),
+    legend.text = element_text(angle = 30),
+    legend.key.height=unit(.5, "cm"),
+    legend.box = "horizontal",
+    plot.margin = unit(c(5,5,50,5), "pt")
+    )
+
+
+log_scale <- gtable_filter(ggplot_gtable(ggplot_build(test)), "guide-box") 
+
+
+# create US scale
+test2 <- ggplot(world) +
+  geom_sf(lwd = .1, color = "grey70") +
+  geom_sf(data = world %>% filter(name == "United States"), aes(fill = name), lwd = .1, color = "grey70") +
+  scale_fill_manual(labels = "200,000", values = "#2a9d8f", guide = guide_legend(keyheight = 1,
+                                                                                 label.position = "bottom",
+                                                                                 label.vjust = .6)) +
+  coord_sf() +
+  theme_void() +
+  theme(
+    legend.position = c(0.7, -0.4),
+    legend.title = element_blank(),
+    legend.text = element_text(angle = 30),
+    legend.key.height=unit(.5, "cm"),
+    legend.box = "horizontal",
+    plot.margin = unit(c(5,5,50,5), "pt")
+    )
+
+US_scale <- gtable_filter(ggplot_gtable(ggplot_build(test2)), "guide-box") 
+
+
+map_listeners <- map_listeners + 
+  annotation_custom(log_scale, xmin=0.5, xmax=1, ymin=-110, ymax=-120) +
+  annotation_custom(US_scale, xmin=120, xmax=130, ymin=-104, ymax=-114)
+
+
+layout <- "
+AB
+CD
+"
+
+field_d_plotter(task$d$mod, "sungspeech", catcolors[1], "<b style='color: #fd7f23;'>Speech</b>") +
+  field_d_plotter(task$d$mod, "sungsong", catcolors[3], "<b style='color: #85c1e7;'>Song</b>") +
+  map_listeners + d_lang_plot + 
+  plot_layout(design = layout, heights = 1) + 
+  plot_annotation(tag_levels = list(c("a", "", "b", "c")))
+
+```
+
+<!-- Fig. 4 | Predicting listener inferences from acoustic features -->
+```{r rev2-fig4, fig.width=9.25, fig.height=4, dev='quartz_pdf'}
+
+#########################################
+# 1. Create plotting functions for Fig. 4
+#########################################
+
+fig4_plotter <- function(data_x, col_x, lab_x, margin_x, y_label = NULL) {
+  output <- ggplot(data_x$predictions %>%
+                        mutate(.pred = case_when(
+                          .pred > 1 ~ 1,
+                          .pred < 0 ~ 0,
+                          TRUE ~ .pred)),
+                      aes(x = .pred, y = perc_inf)) +
+  geom_abline(intercept = 0, slope = 1, lty = "dashed", size = .4) +
+  geom_point(aes(fill = voc_type,
+                 shape = voc_type),
+             alpha = .8,
+             stroke = .05,
+             color = "grey20") +
+  geom_smooth(method = 'lm', color = "black", alpha = 0.2, size = .7) +
+  scale_shape_manual(values = c(21,22)) +
+  scale_fill_manual(labels = lab_x, name = NULL,
+                     values = col_x) +
+  scale_color_manual(labels = lab_x, name = NULL,
+                     values = col_x) +
+  guides(shape = "none",
+         fill = guide_legend(override.aes = list(shape = c(16,15), color = col_x, size = 2.5))) +
+  theme_bw() +
+  scale_x_continuous(labels = percent, expand = c(0,0)) +
+  scale_y_continuous(labels = percent, expand = c(0,0)) +
+  labs(x = "Model Prediction", y = y_label) + #"human prediction"
+  stat_cor(aes(label = paste(..rr.label.., ..p.label.., sep = "~`,`~")),
+           label.x = .5, label.y = .05, p.accuracy = 0.0001, size = 2.9, geom = "label",
+           label.padding = unit(0.1, "lines")) +
+  coord_cartesian(ylim = c(0,1), xlim = c(0,1)) +
+  theme(
+    aspect.ratio = 1,
+    plot.margin = unit(margin_x,"npc"),
+    panel.grid.major = element_line(linetype = "dotted", color = "gray85"),
+    panel.grid.minor = element_line(linetype = "dotted", color = "gray90"),
+    legend.text = element_markdown(size = 10)
+  )
+
+  return(output)
+}
+
+fig4_ridge_plotter <- function(data_x, col_x) {
+  output <- data_x$predictions %>%
+  mutate(.pred = case_when(
+    .pred > 1 ~ 1,
+    .pred < 0 ~ 0,
+    TRUE ~ .pred)) %>%
+  ggplot(., aes(x = .pred, y = voc_type, fill = voc_type)) +
+  geom_density_ridges(scale = 2, alpha =.8, size = .2,
+                      quantile_lines = TRUE, quantiles = 2,
+                      show.legend = F) +
+  lims(x = c(0,1)) +
+  scale_fill_manual(values = col_x) +
+  theme_void()
+
+  return(output)
+}
+
+fig4_var_plotter <- function(data_x, names_x, col_x) {
+  output <- data_x$VI_data %>%
+  slice_head(n = 8) %>%
+  mutate(names = names_x,
+         Importance = (Importance / max(Importance)) * .05) %>%
+  ggplot(aes(x = Importance, y = Variable)) +
+  geom_col(color = "black", width = 1, alpha = .7, show.legend = F, fill = col_x) +
+  ggtext::geom_richtext(aes(label = names, x = Importance + 0.005), size = 2.4, hjust = 0,
+                        fill = NA, label.color = NA, label.padding = grid::unit(rep(0, 4), "pt")) +
+  expand_limits(x = c(0,.25)) +
+  theme_void()
+
+  return(output)
+}
+
+fig4_bar_plotter <- function(data_x, color_x, y_lab = NULL) {
+
+  output <- data_x %>%
+    mutate(auc = auc / 100) %>%
+    rename(human = auc, classifier = accuracy) %>%
+    pivot_longer(names_to = "guesser", values_to = "auc", cols = c(human, classifier)) %>%
+    ggplot(., aes(x = guesser, y = auc)) +
+    stat_summary(geom = "bar", fun = "mean", alpha = .5, fill = color_x) +
+    geom_point(position = position_jitter(width = .2, seed = 271), size = 3, fill = color_x, color = "grey50", pch = 21, alpha = .8) +
+    geom_hline(yintercept = .5, lty = "dashed", size = .7) +
+    stat_summary(geom = "linerange", fun.data = "mean_cl_normal", size = .7, color = "black") +
+    scale_y_continuous(labels = percent) +
+    scale_x_discrete(labels = c("Classifier", "Humans"), position = "top") +
+    labs(y = y_lab, x = NULL) +
+    coord_cartesian(ylim = c(0, 1)) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          panel.grid.major.x = element_blank(),
+          axis.text.x.top = element_text(size = 12))
+
+  return(output)
+}
+
+#############################
+# 2. Create figure components
+#############################
+
+# Main plots
+speech_plot <- fig4_plotter(speech_mod, catcolors[1:2],
+                            c(glue("<b style='color:{adjust_transparency('#fd7f23', .8)};'>ID speech</b>"),
+                              glue("<b style='color:{adjust_transparency('#fd471e', .8)};'>AD speech</b>")),
+                            c(0.02,0.18,0.01,0.01), 'Human Guesses (% rated "baby")')
+song_plot <- fig4_plotter(song_mod, catcolors[3:4],
+                          c(glue("<b style='color:{adjust_transparency('#85c1e7', .8)};'>ID song</b>"),
+                            glue("<b style='color:{adjust_transparency('#1684fc', .8)};'>AD song</b>")),
+                          c(0.02,0.16,0.01,0.01))
+# marginal ridges
+speech_ridges <- fig4_ridge_plotter(speech_mod, catcolors[1:2])
+song_ridges <- fig4_ridge_plotter(song_mod, catcolors[3:4])
+
+# Marginal variable importance
+
+
+song_mod$VI_data %>%
+  slice_head(n = 8)
+
+speech_VI <- fig4_var_plotter(
+  speech_mod,
+  c(
+    "<i style='color: green;'>\u25B2</i> Pitch (Median)",
+    "<i style='color: red;'>\u25BC</i> Roughness (IQR)",
+    "<i style='color: green;'>\u25B2</i> Vowel Travel Rate (Median)",
+    "<i style='color: green;'>\u25B2</i> Pitch (IQR)",
+    "<i style='color: green;'>\u25B2</i> Rhythmic Variability (Recording)",
+    "<i style='color: green;'>\u25B2</i> First Formant (IQR)",
+    "<i style='color: red;'>\u25BC</i> Energy Roll-off (85th %ile)",
+    "<i style='color: green;'>\u25B2</i> Second Formant (Median)"
+  ),
+  catcolors[1]
+)
+
+song_VI <- fig4_var_plotter(
+  song_mod,
+  c(
+    "<i style='color: red;'>\u25BC</i> Intensity (Median)",
+    "<i style='color: green;'>\u25B2</i> Vowel Travel (IQR)",
+    "<i style='color: red;'>\u25BC</i> First Formant (Median)",
+    "<i style='color: red;'>\u25BC</i> Roughness (Median)",
+    "<i style='color: red;'>\u25BC</i> Second Formant (IQR)",
+    "<i style='color: green;'>\u25B2</i> Vowel Travel Rate (IQR)",
+    "<i style='color: green;'>\u25B2</i> Second Formant (Median)",
+    "<i style='color: green;'>\u25B2</i> Pulse Clarity"
+    ),
+  catcolors[3]
+)
+
+
+#############################
+# 3. Assemble into final plot
+#############################
+
+fig4b_speech <- speech_plot + inset_element(speech_VI, .967, -0.01, 1.7, 1.01)
+# + inset_element(speech_ridges, -.04,0.97,1.05,1.15, clip = FALSE)
+fig4b_song <- song_plot + inset_element(song_VI, .967, -0.01, 1.7, 1.01)
+#  + inset_element(song_ridges, -.04,0.97,1.05,1.15, clip = FALSE)
+
+fig4b_speech + fig4b_song +
+  plot_layout(guides = "collect", ncol = 2) &
+  theme(legend.position = 'bottom')
+
+```
+
+<!-- ED Fig. 1 | LASSO classification with alternate cross-validation -->
+
+```{r rev2-extended_fig1, fig.width=4, fig.height=3}
+
+classifier_plotter2 <- function(data, fill_color, title_var, y_lab) {
+  data %>% 
+    mutate(across(where(is.numeric), ~ .x / 100),
+           voc_type = factor(voc_type, levels = c("Speech", "Song"))) %>%
+    ggplot(., aes(x = voc_type, y = auc, fill = voc_type)) +
+    stat_summary(geom = "bar", fun = "mean", alpha = .6) +
+    # geom_pointrange(aes(ymin = conf.low, ymax = conf.high), position = position_jitter(width = .2, seed = 271), size = 0.6, pch = 21, alpha = .8) +
+    geom_point(position = position_jitter(width = .2, seed = 271), size = 2, pch = 21, alpha = .8) +
+    geom_hline(yintercept = .5, lty = "dashed", size = .7) +
+    stat_summary(geom = "linerange", fun.data = "mean_cl_normal", size = .7, color = "black") +
+    scale_fill_manual(values = fill_color) +
+    scale_y_continuous(labels = percent) +
+    scale_x_discrete(position = "top") +
+    labs(y = y_lab, x = NULL, title = title_var) +
+    coord_cartesian(ylim = c(0, 1)) +
+    theme_minimal() +
+    theme(legend.position = "none",
+          panel.grid.major.x = element_blank(),
+          axis.text.x.top = element_text(size = 12),
+          plot.title = element_text(hjust = 0.5, size = 16))
+}
+
+lang_fam_plot <- speech_LASSO_langfam$mod_auc$sites %>% 
+  mutate(voc_type = "Speech") %>% 
+  bind_rows(., song_LASSO_langfam$mod_auc$sites %>% 
+              mutate(voc_type = "Song")) %>%
+  classifier_plotter2(.,  catcolors[c(1,3)], "Language Family", "Performance (% AUC)")
+
+region_plot <- speech_LASSO_region$mod_auc$sites %>% 
+  mutate(voc_type = "Speech") %>% 
+  bind_rows(., song_LASSO_region$mod_auc$sites %>% 
+              mutate(voc_type = "Song")) %>%
+  classifier_plotter2(.,  catcolors[c(1,3)], "World Region", NULL)
+
+lang_fam_plot + region_plot
+
+```
+
+
+<!-- ED Fig. 2 | LASSO classification with raw audio -->
+
+```{r rev2-extended_fig2, fig.width=10, fig.height=3, dev='quartz_pdf'}
+load(here("results", "lasso_results-rawAudio.RData"))
+
+speech_classifier_raw <- classifier_plotter(speech_LASSO_raw$lasso_predictions, "Speech", catcolors[1], "Performance (% AUC)")
+song_classifier_raw <- classifier_plotter(song_LASSO_raw$lasso_predictions, "Song", catcolors[3], NULL)
+
+speech_variable_raw <- variable_importance_plotter(speech_LASSO_raw$var_import_data, c(
+      "<i style='color: green;'>\u25B2</i> Pitch (Median)",
+      "<i style='color: green;'>\u25B2</i> Vowel Travel Rate (IQR)",
+      "<i style='color: green;'>\u25B2</i> Pitch (IQR)",
+      "<i style='color: red;'>\u25BC</i> Roughness (IQR)",
+      "<i style='color: green;'>\u25B2</i> Second Formant (Median)",
+      "<i style='color: red;'>\u25BC</i> Energy Roll-Off (85th %-ile)"
+    ), catcolors[1], 3)
+
+song_variable_raw <- variable_importance_plotter(song_LASSO_raw$var_import_data, c(
+      "<i style='color: green;'>\u25B2</i> Vowel Travel (IQR)",
+      "<i style='color: red;'>\u25BC</i> Intensity (Median)",
+      "<i style='color: red;'>\u25BC</i> Attack Curve Slope (Median)",
+      "<i style='color: red;'>\u25BC</i> Roughness (IQR)",
+      "<i style='color: red;'>\u25BC</i> Inharmonicity",
+      "<i style='color: green;'>\u25B2</i> Peak Tempo (Hz)"
+    ), catcolors[3], 3)
+
+layout <- "
+BCCCCDEEEE
+"
+
+speech_classifier_raw + speech_variable_raw + song_classifier_raw + song_variable_raw +
+  plot_layout(design = layout)
+
+```
+
+<!-- ED Fig. 3 | PCA of acoustic features -->
+```{r rev2-extended_fig3, fig.width=7, fig.height=3}
+
+########################
+# Violin Plots for PCA #
+########################
+
+# PCA violin plot
+pca_plot2 <- function(pc_to_plot, compare_x, col = catcolors, ylab = NULL, flip = FALSE, bonus = FALSE) {
+  dat <- PCA2 %>%
+    augment(acoustic2 %>%
+              drop_na() %>%
+              mutate(voc_type = str_sub(id, 6),
+                     voc_type = factor(voc_type, levels = c("B", "D", "A", "C")))) %>%
+    rename_with(~str_remove(.x, ".fitted"), contains(".fitted"))
+
+  if (flip) {
+    dat <- dat %>%
+      mutate( {{ pc_to_plot }} := {{ pc_to_plot }} * -1)
+  }
+
+  p <- ggplot(dat,
+         aes(x = voc_type, y = {{ pc_to_plot }} )) +
+    geom_violin(aes(fill = voc_type), alpha = .8, size = .3) +
+    geom_boxplot(width = .4, outlier.shape = NA, size = .3) +
+    geom_signif(
+      comparisons = compare_x,
+      map_signif_level = TRUE, textsize = 3
+    ) +
+    scale_fill_manual(values = col,
+                      labels = c("ID Speech", "AD Speech", "ID Song", "AD Song"),
+                      name = NULL) +
+    coord_cartesian(ylim = c(-7, 9), clip = "off") +
+    labs(y = ylab, x = NULL) +
+    theme_minimal() +
+    theme(strip.text = element_blank(), #element_text(face = "bold", size = 15),
+          axis.title.y = element_text(size = 9),
+          panel.grid.major.x = element_blank(),
+          # legend.position = "none",
+          axis.text = element_blank(),
+          plot.margin = margin(unit(c(30,5,5,5), "pt")))
+
+  if (bonus) {
+    text_x <- textGrob("***", gp = gpar(fontsize=9))
+
+    p <- p +
+      geom_segment(x = 1.5, xend = 3.5, y = 12, yend = 12, size = .4) +
+      geom_segment(x = 1.5, xend = 1.5, y = 12, yend = 11.5, size = .4) +
+      geom_segment(x = 3.5, xend = 3.5, y = 12, yend = 11.5, size = .4) +
+      annotation_custom(text_x, xmin = 2.5, xmax = 2.5, ymin = 12.6, ymax=12.6)
+  }
+
+  return(p)
+}
+
+# note: am flipping the sign of these two components for interpretability (the sign is arbitrary)
+pca_plot2(PC1, list(c("B", "D"), c("A", "C")), ylab = "Principal Component 1", flip = TRUE, bonus=TRUE) +
+  pca_plot2(PC2, list(c("B", "D"), c("A", "C")), ylab = "Principal Component 2", flip = TRUE) +
+  pca_plot2(PC3, list(c("B", "D"), c("A", "C")), ylab = "Principal Component 3") +
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "bottom"
+  )
+
+```
+
+<!-- ED Fig. 4 | Screenshots of listener experiment -->
+```{r rev2-extended_fig4, fig.align = "center"}
+
+# load images
+ss_desktop <- image_read(here("viz", "png", "TML-IDS_screenshotDesktop.png")) %>% image_ggplot()
+ss_mobile <- image_read(here("viz", "png", "TML-IDS_screenshotMobile.png")) %>% image_ggplot()
+
+# combine
+ss_desktop + ss_mobile +
+  plot_annotation(tag_levels = "a")
+
+```
+
+<!-- ED Fig. 5 | Response bias & raw accuracy in naive listener experiment -->
+
+```{r rev2-extended_fig5, fig.width=9, fig.height=4}
+
+custom_scale <- c(seq(0,1, .25), 69, 69, seq(0,1, .25)) %>% percent
+custom_scale[6:7] <- " "
+
+plot_data <- trial_data %>%
+  group_by(stimulus) %>%
+  summarise(baby = mean(inf_guess),
+            across(c(sung, infdir, id, correct_response, fieldsite), unique)) %>%
+  ungroup() %>%
+  mutate(voc_type = case_when(
+    sung == 1 & infdir == 1 ~ "ID song",
+    sung == 0 & infdir == 1 ~ "ID speech",
+    sung == 1 & infdir == 0 ~ "AD song",
+    sung == 0 & infdir == 0 ~ "AD speech",
+  ),
+  voc_type = factor(voc_type, levels = c("ID speech", "AD speech", "ID song", "AD song"))) %>%
+  group_by(voc_type, fieldsite) %>%
+  summarise(avg = mean(baby),
+            sd = sd(baby),
+            infdir = unique(infdir),
+            sung = unique(sung),
+            .groups = "drop") %>%
+  mutate(
+    x_offset_dir = ifelse(infdir == 1, 1, -1),
+    x_offset = x_offset_dir * .15,
+    fieldsite = factor(fieldsite),
+    x_pos = x_offset + as.numeric(fieldsite)
+  ) %>%
+  left_join(., fieldsite_codes, by = "fieldsite") %>%
+  left_join(., trial_data %>% group_by(fieldsite) %>% summarise(overall_acc = mean(correct)), by = "fieldsite") %>%
+  mutate(overall_acc = ifelse(is.na(overall_acc), 0, overall_acc),
+         society = fct_reorder(society, overall_acc)) %>%
+  #######
+group_by(sung, fieldsite) %>%
+  arrange(desc(avg), .by_group = TRUE) %>%
+  mutate(rank = row_number()) %>%
+  ungroup() %>%
+  mutate(closest_to_centre = ifelse((sung == 0 & rank == 1) | (sung == 1 & rank == 2), 1, 0),
+         # avg = ifelse(sung == 1, avg + 1.9, avg),
+         society2 = ifelse(sung == 1, paste0(society, "2"), society))
+
+#########################
+# 2. Plotting functions #
+#########################
+
+listener_plotter <- function(data_x, headings = TRUE) {
+  data1 <- data_x %>%
+    group_by(stimulus) %>%
+    summarise(baby = mean(inf_guess),
+              adult = 1 - baby,
+              rt = median(rt) / 1000,
+              across(c(sung, infdir, id, correct_response), unique)) %>%
+    ungroup()
+  
+  data2 <- data_x %>%
+    ungroup() %>%
+    filter(correct == 1) %>%
+    group_by(stimulus) %>%
+    summarise(correct_rt = median(rt) / 1000) %>%
+    ungroup() %>%
+    right_join(., data1, by = "stimulus") %>%
+    mutate(
+      voc_type = case_when(
+        infdir == 1 & sung == 1 ~ "ID song",
+        infdir == 1 & sung == 0 ~ "ID speech",
+        infdir == 0 & sung == 1 ~ "AD song",
+        infdir == 0 & sung == 0 ~ "AD speech"),
+      voc_type = fct_relevel(voc_type, "ID speech", "AD speech", "ID song", "AD song"))
+  
+  data2 <- data2 %>%
+    mutate(
+      violin_direction = ifelse(infdir == 1, -1, 1),
+      line_x = paste0(id, sung),
+      x_jitter = runif(nrow(data2),-.1, .1) + .3 * -violin_direction,
+      violin_offset = ifelse(infdir == 1, .2, -.2),
+      voc_type = factor(voc_type, levels = c("ID speech", "AD speech", "ID song","AD song"))
+    )
+  
+  output <- ggplot(data = data2, aes(y = baby,
+                                     x = voc_type,
+                                     fill = voc_type)) +
+    geom_point(aes(y = baby,
+                   color = voc_type),
+               position = position_nudge(x = data2$x_jitter),
+               size = .5, alpha = .8) +
+    scale_color_manual(values = catcolors) +
+    scale_x_discrete(
+      labels = c(glue("<b style='color:{adjust_transparency('#fd7f23', .8)};'>ID speech</b>"),
+                 glue("<b style='color:{adjust_transparency('#fd471e', .8)};'>AD speech</b>"),
+                 # " ",
+                 glue("<b style='color:{adjust_transparency('#85c1e7', .8)};'>ID song</b>"),
+                 glue("<b style='color:{adjust_transparency('#1684fc', .8)};'>AD song</b>")),
+      position = "top",
+      drop = FALSE
+    ) +
+    geom_line(aes(group = line_x, x = x_jitter + as.numeric(voc_type)),
+              alpha = .05) +
+    geom_flat_violin(aes(violin_direction = violin_direction),
+                     trim = TRUE,
+                     alpha = .8) +
+    scale_fill_manual(values = catcolors) +
+    geom_boxplot(
+      fill = "white",
+      notch = TRUE,
+      alpha = .8,
+      width = .05,
+      outlier.shape = NA,
+      coef = 0
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x.top = element_markdown(size = 14),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      legend.position = 'none', 
+      axis.text.y = element_blank()
+    ) +
+    scale_y_continuous(labels = percent, limits = c(0,1)) +
+    labs(y = NULL,
+         x = NULL,
+         title = NULL) +
+    expand_limits(x = c(1.2,4.8))
+  
+  if (headings) {
+    output <- output
+  } else {
+    output <- output +
+      theme(
+        axis.text.x.top = element_blank()
+      )
+  }
+  
+  return(output)
+}
+
+#####################
+# 3. Creating plots #
+#####################
+
+accuracy_plot <- listener_plotter(trial_data)
+
+bias_plot <- trial_data %>% 
+  group_by(sung, stimulus) %>% 
+  summarise(
+    avg_acc = mean(inf_guess),
+    se_acc = sd(inf_guess) / sqrt(n()),
+    conf.low = avg_acc - se_acc*qt(0.975, n() - 1),
+    conf.high = avg_acc + se_acc*qt(0.975, n() - 1)
+  ) %>% 
+  ungroup() %>% 
+  mutate(sung = factor(sung)) %>% 
+  ggplot(., aes(y = avg_acc, x = sung)) + 
+  geom_point(position = position_jitter(width = 0.1), alpha = 0.6, colour = "grey90", size = 0.4) + 
+  stat_summary(aes(fill = sung), geom = "point", fun = "mean", size = 5, color = "black", pch = 21) +
+  scale_y_continuous(labels = percent) +
+  scale_x_discrete(labels = c("Speech", "Song"), position = "top") +
+  # speech annnotation
+  annotate("text", x = 1.6, y = 0.28, label = "bias away from \"baby\" in speech ", size = 3) +
+  geom_curve(x = 1.3, xend = 1.1, y = 0.32, yend = 0.36, curvature = -0.2, arrow = arrow(length = unit(0.03, "npc"))) +
+  # song annotation
+  annotate("text", x = 1.5, y = 0.61, label = "bias toward \"baby\" in song", size = 3) +
+  geom_curve(x = 1.6, xend = 1.85, y = 0.64, yend = 0.67, curvature = -0.2, arrow = arrow(length = unit(0.03, "npc"))) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", alpha = 0.8, color = "black") +
+  scale_fill_manual(values = catcolors[c(1,3)]) +
+  coord_cartesian(ylim = c(0,1), clip = "off") + 
+  labs(
+    y = "Infant-directedness (% rated \"baby\")",
+    x = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x.top = element_markdown(size = 14),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  )
+
+layout <- "
+ABBBB
+"
+
+bias_plot + accuracy_plot + 
+  plot_layout(design = layout) +
+  plot_annotation(tag_levels = "a")
+
+```
+
+
+<!-- ED Fig. 6 | No learning effects in listener experiment -->
+```{r rev2-extended_fig6, fig.width = 8, fig.height = 6}
+
+test1 <- trial_data %>%
+  filter(first_trial == 1) %>%
+  group_by(stimulus) %>%
+  summarise(baby = mean(inf_guess),
+            adult = 1 - baby,
+            rt = median(rt) / 1000,
+            across(c(sung, infdir, id, correct_response), unique)) %>%
+  ungroup()
+
+test2 <- trial_data %>%
+  filter(first_trial == 1) %>%
+  ungroup() %>%
+  filter(correct == 1) %>%
+  group_by(stimulus) %>%
+  summarise(correct_rt = median(rt) / 1000) %>%
+  ungroup() %>%
+  right_join(., test1, by = "stimulus") %>%
+  mutate(
+    voc_type = case_when(
+      infdir == 1 & sung == 1 ~ "ID song",
+      infdir == 1 & sung == 0 ~ "ID speech",
+      infdir == 0 & sung == 1 ~ "AD song",
+      infdir == 0 & sung == 0 ~ "AD speech"),
+    voc_type = fct_relevel(voc_type, "ID speech", "AD speech", "ID song", "AD song"))
+#
+
+test2 <- test2 %>%
+  mutate(violin_direction = ifelse(infdir == 1, -1, 1),
+         line_x = paste0(id, sung),
+         x_jitter = runif(nrow(test2),-.1, .1) + .3 * -violin_direction,
+         violin_offset = ifelse(infdir == 1, .2, -.2)
+         )
+
+figS2a <- ggplot(data = test2, aes(y = baby,
+                         x = voc_type,
+                         fill = voc_type)) +
+  geom_point(aes(y = baby,
+                 color = voc_type),
+             position = position_nudge(x = test2$x_jitter),
+             size = .5, alpha = .8) +
+  scale_color_manual(values = catcolors) +
+  scale_x_discrete(labels = c("<b style='color:#fd7f23;'>ID speech</b>", "<b style='color:#fd471e;'>AD speech</b>",
+                              "<b style='color:#85c1e7;'>ID song</b>", "<b style='color:#1684fc;'>AD song</b>"),
+                   position = "top") +
+  geom_line(aes(group = line_x, x = x_jitter + as.numeric(voc_type)),
+            alpha = .05) +
+  geom_flat_violin(aes(violin_direction = violin_direction),
+                   trim = TRUE,
+                   alpha = .8) +
+  scale_fill_manual(values = catcolors) +
+  geom_boxplot(
+    fill = "white",
+    notch = TRUE,
+    alpha = .8,
+    width = .05,
+    outlier.shape = NA,
+    coef = 0
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x.top = element_markdown(size = 14),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = 'none'
+  ) +
+  scale_y_continuous(labels = percent, limits = c(0,1)) +
+  labs(y = "% \"infant\" responses",
+       x = NULL,
+       title = NULL) +
+  expand_limits(x = c(1.2,4.8))
+
+# Practice effect plot
+figS2b <- task$practise_mod %>%
+  plot_model(., type = "pred", terms = c("trial_num", "voc_type")) +
+  scale_y_continuous(labels = percent) +
+  scale_colour_manual(values = catcolors[c(3,1,4,2)]) +
+  scale_fill_manual(values = catcolors[c(3,1,4,2)]) +
+  coord_cartesian(ylim = c(0,1), xlim = c(0,16)) +
+  labs(title = NULL,
+       y = "% correct",
+       x = "Trial Number (Out of 16)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+figS2a / figS2b + 
+  plot_annotation(tag_levels = "a")
+
+```
+
+<!-- ED Fig. 7 | Preregistered acoustic analyses (from original submission) -->
+```{r rev2-extended_fig7, fig.width= 9, fig.height=6}
+
+if (full_run == TRUE) {
+  
+  acoustic <- read_csv(here("results", "acoustics-Winsorized.csv")) %>% 
+    rename("infdir" = "infantdir") %>%
+    mutate(id_song = infdir * song) %>%
+    relocate(id_song, .after = "song") %>%
+    # Even-numbered participants = exploratory; odd = confirmatory
+    mutate(samp = ifelse(as.numeric(substr(id, 4, 5))%%2 == 0, "exp", "conf")) %>%
+    # keep only voices with all 4 vocalization types
+    group_by(id_person) %>% filter(n() == 4) %>% ungroup() %>%
+    # removing dodgy variables
+    select(!matches("(mean)|(std)|(quart)|(_1q)|(_3q)|(range)|(dist)|(max)|(min)|(num_events)|(default)|(travel)"),
+           praat_voweltravel_median, praat_voweltravel_IQR, praat_voweltravel_rate_median, praat_voweltravel_rate_IQR) %>%
+    drop_na() %>%
+    # z-scoring within each voice
+    # this is both necessary for PCA, but also helps the mixed-models converge fully
+    # group_by(id_person) %>%
+    # de-mean then scale (within voices)
+    group_by(id_person) %>% 
+    mutate(across(matches("(praat_)|(mir_)|(tm_)|(npvi_)"), ~ scale(.x))) %>%
+    ungroup() %>%
+    mutate(song = ifelse(song == 1, "song", "speech"),
+           infdir = ifelse(infdir == 1, "infant", "adult"),
+           voc_type = str_sub(id, 6,6))
+
+  hypotheses <- read_csv(here("data", "lincomb_hypotheses.csv"))
+
+  acoustic_tests <- list()
+
+  # defining hypothesis matrix
+  linear_tests <- c(
+    0,1,0,0, # ID vs AD overall
+    0,.5,0,.5, # ID song vs AD song
+    0,0,.5,-.5 # ID song vs AD speech
+  ) %>%
+    matrix(., ncol = 4, byrow = TRUE)
+  comparisons <- c("ID_AD_overall", "IDsong_ADsong", "IDsong_IDspeech")
+
+  for (samp_x in c("exp", "conf")) {
+    for (feature in select(acoustic, matches("(praat_)|(mir_)|(tm_)|(npvi_)")) %>% names) {
+      mod_formula <- reformulate(c("infdir + song + id_song + (1|id_site) + (1|id_person)"), response = feature)
+      # extracts p-value for the infant-directed term
+      mod <- acoustic %>%
+        filter(samp == samp_x) %>%
+        lmer(mod_formula, data = .)
+
+      for (comp_x in seq_along(comparisons)) {
+        acoustic_tests[[samp_x]][[comparisons[comp_x]]] <- glht(mod,
+                                                                linfct = linear_tests[comp_x,] %>% as.matrix() %>% t(),
+                                                                # if we have hypotheses, use directional tests, if not use two-sided
+                                                                alternative = ifelse(feature %in% hypotheses$Feature,
+                                                                                     hypotheses %>% filter(Feature == feature) %>% pull(comparisons[comp_x]),
+                                                                                     "two.sided"),
+                                                                test = adjusted(type = "none")) %>% tidy %>%
+          mutate(feat = feature, keep = ifelse(adj.p.value < .05, 1,0)) %>%
+          bind_rows(acoustic_tests[[samp_x]][[comparisons[comp_x]]], .)
+      }
+    }
+  }
+
+  selected_features <- list()
+
+  for (comp_x in comparisons) {
+    selected_features[[comp_x]] <- intersect(acoustic_tests$exp[[comp_x]] %>% filter(keep == 1) %>% pull(feat),
+                                             acoustic_tests$conf[[comp_x]] %>% filter(keep == 1) %>% pull(feat))
+  }
+
+  # all features that are significant across exp and conf
+  selected_features$all <- unique(c(selected_features$ID_AD_overall, selected_features$IDsong_ADsong, selected_features$IDsong_IDspeech))
+
+  final_supp <- list()
+
+  for (comp_x in seq_along(comparisons)) {
+    for (feature in selected_features$all) {
+      mod_formula <- reformulate(c("infdir + song + id_song + (1|id_site) + (1|id_person)"), response = feature)
+      mod <- lmer(mod_formula, data = acoustic)
+
+      final_supp[[comparisons[comp_x]]] <- glht(mod,
+                                                linfct = linear_tests[comp_x,] %>% as.matrix() %>% t(),
+                                                # if we have hypotheses, use directional tests, if not use two-sided
+                                                alternative = ifelse(feature %in% hypotheses$Feature,
+                                                                     hypotheses %>% filter(Feature == feature) %>% pull(comparisons[comp_x]),
+                                                                     "two.sided"),
+                                                test = adjusted(type = "none")) %>% tidy %>%
+        mutate(feature = feature,
+               comparison = comparisons[comp_x]) %>%
+        bind_rows(final_supp[[comparisons[comp_x]]], .)
+    }
+  }
+
+  final_supp$all <- bind_rows(final_supp$ID_AD_overall, final_supp$IDsong_ADsong, final_supp$IDsong_IDspeech) %>%
+    select(feature, adj.p.value, comparison) %>%
+    pivot_wider(names_from = comparison, values_from = adj.p.value)
+
+  feature.vars <- final_supp$all %>% pull(feature)
+
+  final_supp$plot <- acoustic %>%
+    select(c(1:7), selected_features$all) %>%
+    pivot_longer(names_to = "feat", values_to = "z", cols = matches("(praat_)|(mir_)|(tm_)|(npvi_)")) %>%
+    left_join(., final_supp$all, by = c("feat" = "feature")) %>%
+    mutate(
+      across(c(feat, infdir, song), as_factor),
+      infdir = factor(infdir, levels = c("infant", "adult") %>% rev)
+    )
+
+  save(final_supp, file = here("results", "supplementary_lincom_temp.RData"))
+} else {
+  load(here("results", "supplementary_lincom_temp.RData"))
+}
+
+# Plotting
+
+feat_labels <- c("Pitch (Median)", "Pitch (IQR)", "First Formant (Median)", "Second Formant (Median)", "Second Formant (IQR)",
+                 "Intensity (Median)", "Intensity (IQR)", "Attack Curve Slope (Median)", "Attack Curve Slope (IQR)",
+                 "Energy Roll-off (85th %ile)", "Roughness (Median)", "Roughness (IQR)", "Inharmonicity", "Vowel Travel (Median)", "Vowel Travel (IQR)","Vowel Travel Rate (Median)", "Vowel Travel Rate (IQR)", "Peak Modulation Rate", "Tempo") %>% rev
+
+feat_order <- c("praat_f0_median", "praat_f0_IQR", "praat_f1_median", "praat_f2_median",
+                                         "praat_f2_IQR", "praat_intensity_median",  "praat_intensity_IQR",
+                                         "mir_attack_med", "mir_attack_iqr", "mir_rolloff85", "mir_roughness_med",
+                                         "mir_roughness_iqr", "mir_inharmonicity", "praat_voweltravel_median", "praat_voweltravel_IQR", "praat_voweltravel_rate_median",
+              "praat_voweltravel_rate_IQR", "tm_peak_hz", "mir_tempo")
+
+## boxplots for all acoustic features across 3 comparison types
+fig3_plotter <- function(data_x, comp_x, comp_fct, cols, title_x, feat_label) {
+  p <- data_x %>%
+    mutate(stars = case_when(
+      {{comp_x}} > .05 ~ "",
+      between({{comp_x}}, .01, .05) ~ "*",
+      between({{comp_x}}, .001, .01) ~ "**",
+      {{comp_x}} < .001 ~ "***"
+    )) %>%
+    mutate(feat = fct_relevel(feat, feat_order)) %>%
+    ggplot(., aes(x = feat, y = z, fill = {{ comp_fct }}, alpha = {{ comp_x }} > .05)) +
+    geom_hline(yintercept = 0,
+               linetype = "dotted",
+               alpha = .6) +
+    geom_boxplot(color = "black",
+                 notch = TRUE,
+                 outlier.shape = NA,
+                 lwd = 0.2) +
+    geom_text(aes(label = stars, y = 1.8)) +
+    scale_fill_manual(values = cols) +
+    scale_alpha_manual(values = c(.8, .1)) +
+    theme_bw() +
+    theme(
+      axis.text.x = element_text(colour = "black",
+                                 size = 12),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      legend.position = 'none'
+    ) +
+    scale_x_discrete(limits = feat_order %>% rev,
+                     labels = feat_labels) +
+    expand_limits(y = c(-2,2)) +
+    labs(x = NULL, y = NULL,
+         title = title_x) +
+    coord_flip() +
+    theme(plot.title = element_markdown(hjust = .5))
+
+  if (!feat_label) {
+    p + theme(
+      axis.text.y = element_blank()
+    )
+  } else { p }
+}
+
+fig3 <- list()
+
+# Panel A: ID vs AD overall
+fig3$panel_1 <- fig3_plotter(final_supp$plot, ID_AD_overall, infdir, c("#8ac926", "#1982c4") %>% rev,
+                             "<b style='color:#8ac926;'>ID</b> vs. <b style='color:#1982c4;'>AD</b> (overall)", TRUE)
+# Panel B: ID song vs AD song
+fig3$panel_2 <- fig3_plotter(final_supp$plot %>% filter(song == "song"), IDsong_ADsong, infdir, c("#1684fc", "#85c1e7"),
+                             "<b style='color:#85c1e7;'>ID Song</b> vs. <b style='color:#1684fc;'>AD Song</b>", FALSE)
+# Panel C: ID song vs ID speech
+fig3$panel_3 <- fig3_plotter(final_supp$plot %>% filter(infdir == "infant"), IDsong_IDspeech, song, c("#85c1e7", "#fd7f23"),
+                             "<b style='color:#85c1e7;'>ID Song</b> vs. <b style='color:#fd7f23;'>ID Speech</b>", FALSE)
+
+wrap_plots(fig3$panel_1,fig3$panel_2,fig3$panel_3, ncol = 3)
+
+```
+
+<!-- ED Fig. 8 | Response time analyses -->
+```{r rev2-extended_fig8, fig.width=6, fig.height=3}
+
+plot_data <- trial_data %>%
+  ungroup() %>%
+  filter(correct == 1) %>%
+  group_by(stimulus, voc_type, fieldsite, region, id) %>%
+  summarise(
+    rt = median(rt) / 1000
+  ) %>%
+  ungroup() %>% 
+  mutate(
+    voc_type = case_when(
+      voc_type == "A" ~ "ID song",
+      voc_type == "B" ~ "ID speech",
+      voc_type == "C" ~ "AD song",
+      voc_type == "D" ~ "AD speech"),
+    voc_type = fct_relevel(voc_type, "ID speech", "AD speech", "ID song", "AD song"),
+    infdir = ifelse(voc_type %in% c("ID song", "ID speech"), 1, 0),
+    sung = ifelse(voc_type %in% c("ID song", "AD song"), 1, 0))
+
+plot_data <- plot_data %>%
+  mutate(
+    violin_direction = ifelse(infdir == 1, -1, 1),
+    line_x = paste0(id, sung),
+    x_jitter = runif(nrow(plot_data),-.1, .1) + .3 * -violin_direction,
+    violin_offset = ifelse(infdir == 1, .2, -.2),
+    voc_type = factor(voc_type, levels = c("ID speech", "AD speech", "ID song","AD song"))
+  )
+
+ggplot(data = plot_data, aes(y = rt,
+                         x = voc_type,
+                         fill = voc_type)) +
+  geom_point(aes(y = rt,
+                 color = voc_type),
+             position = position_nudge(x = plot_data$x_jitter),
+             size = .5, alpha = .8) +
+  scale_color_manual(values = catcolors) +
+  scale_x_discrete(
+    labels = c(glue("<b style='color:{adjust_transparency('#fd7f23', .8)};'>ID speech</b>"),
+               glue("<b style='color:{adjust_transparency('#fd471e', .8)};'>AD speech</b>"),
+               # " ",
+               glue("<b style='color:{adjust_transparency('#85c1e7', .8)};'>ID song</b>"),
+               glue("<b style='color:{adjust_transparency('#1684fc', .8)};'>AD song</b>")),
+    position = "top",
+    drop = FALSE,
+    # expand = expansion(add = c(.6, .1))
+  ) +
+  geom_line(aes(group = line_x, x = x_jitter + as.numeric(voc_type)),
+            alpha = .05) +
+  geom_flat_violin(aes(violin_direction = violin_direction),
+                   trim = TRUE,
+                   alpha = .8) +
+  scale_fill_manual(values = catcolors) +
+  geom_boxplot(
+    fill = "white",
+    notch = TRUE,
+    alpha = .8,
+    width = .05,
+    outlier.shape = NA,
+    coef = 0
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x.top = element_markdown(size = 14),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    legend.position = 'none', 
+  ) +
+  labs(y = "response time (s)",
+       x = NULL,
+       title = NULL) +
+  expand_limits(x = c(1.2,4.8))
+
+```

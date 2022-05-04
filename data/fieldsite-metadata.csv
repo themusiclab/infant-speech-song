@@ -1,0 +1,22 @@
+﻿Region,Sub-Region,Society,Language,Language Family,Subsistence type,Population of Residential Community,Distance to Closest Urban Center (km),Average Number of Children Born per Woman,N,Frequency of Infant-Directed Speech,Frequency of Infant-directed Song,Glottocode,fieldsite,audiocountry,audiolang,audioglot
+Africa,Central Africa,Mbendjele BaYaka,Mbendjele,Niger-Congo,Hunter-Gatherer,61-152,120,7,60,0 - Unknown/Uncertain,2 - Sometimes performed,yaka1272,MBE,Republic of Congo,Mbendjele,yaka1272
+,Eastern Africa,Hadza,Hadza,Hadza,Hunter-Gatherer,35,80,6,38,2 - Sometimes produced,3 - Often performed,hadz1240,HAD,Tanzania,Hadza,hadz1240
+,,Nyangatom,Nyangatom,Nilotic,Pastoralist,155,180,5.6,56,2 - Sometimes produced,3 - Often performed,nyan1315,NYA,Ethiopia,Nyangatom,nyan1315
+,,Toposa,Toposa,Nilotic,Pastoralist,250,180,5.2,60,2 - Sometimes produced,3 - Often performed,topo1242,TOP,Ethiopia,Nyangatom,topo1242
+Asia,East Asia,Beijing,Mandarin,Sino-Tibetan,Urban,21.5M,0,1,124,3 - Often produced,2 - Sometimes performed,mand1415,BEJ,China,Chinese/Mandarin,mand1415
+,South Asia,Jenu Kurubas,Kannada,Dravidian,Other,2000,15,1,80,0 - Unknown/Uncertain,2 - Sometimes performed,nucl1305,JEN,India,Kannada,nucl1305
+,Southeast Asia,Mentawai Islanders,Mentawai,Austronesian,Horticulturalist,260,120,Unknown,60,3 - Often produced,3 - Often performed,ment1249,MEN,Indonesia,Mentawai,ment1249
+Europe,Eastern Europe,Krakow,Polish,Indo-European,Urban,"771,069",0,1.54,44,0 - Unknown/Uncertain,3 - Often performed,poli1260,KRA,Poland,Polish,poli1260
+,,Rural Poland,Polish,Indo-European,Agriculturalists,"6,720",70,1.83,55,0 - Unknown/Uncertain,3 - Often performed,poli1260,LIM,Poland,Polish,poli1260
+,Scandinavia,Turku,Finnish \& Swedish,Uralic and Indo-European,Urban,"186,000",0,1.41,80,3 - Often produced,3 - Often performed,finn1318,TUR,Finland,Finnish,finn1318
+North America,North America,San Diego,English (USA),Indo-European,Urban,3.3M,0,1.7,116,3 - Often produced,3 - Often performed,stan1293,USD,United States,English,stan1293
+,,Toronto,English (Canadian),Indo-European,Urban,5.9M,0,1.5,198,3 - Often produced,3 - Often performed,stan1293,TOR,Canada,English,stan1293
+Oceania,Melanesia,Ni-Vanuatu,Bislama,Indo-European Creole,Horticulturalist,"6,000",224,3.78,90,3 - Often produced,2 - Sometimes performed,bisl1239,VAN,Vanuatu,Bislama,bisl1239
+,,Enga,Enga,Trans-New Guinea,Horticulturalist,500,120,6,22,3 - Often produced,2 - Sometimes performed,enga1252,PNG,Papua New Guinea,Enga,enga1252
+,Polynesia,Wellington,English (New Zealand),Indo-European,Urban,"210,400",0,1.45,228,3 - Often produced,2 - Sometimes performed,stan1293,WEL,New Zealand,English,stan1293
+South America,Amazonia,Arawak,English Creole,Indo-European,Other,350,32,3,48,.,3 - Often performed,creo1235,ARA,Guyana,English Creole,creo1235
+,,Tsimane,Tsimane,Moseten-Tsimane,Horticulturalist,150,234,9,51,2 - Sometimes produced,2 - Sometimes performed,mose1249,TSI,Bolivia,Tsimane,mose1249
+,,Sapara \& Achuar,Quechua \& Achuar,Quechuan \& Jivaroan,Horticulturalist,200,205,9,59,2 - Sometimes produced,2 - Sometimes performed,shua1257,SPA,Ecuador,Achuar,shua1257
+,Central Andes,Quechua/Aymara,Spanish,Indo-European,Agro-Pastoralist,200,8,4,49,2 - Sometimes produced,1 - Never performed,stan1288,QUE,Peru,Spanish,stan1288
+,Northwestern South America,Afrocolombians,Spanish,Indo-European,Horticulturalist,"300-1,000",100,6.6,53,3 - Often produced,2 - Sometimes performed,stan1288,ACO,Colombia,Spanish,stan1288
+,,Colombian Mestizos,Spanish,Indo-European,Commercial Economy,"470,000",0,3.5,43,3 - Often produced,0 - Unknown/Uncertain,stan1288,MES,Colombia,Spanish,stan1288

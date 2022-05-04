@@ -1,0 +1,15 @@
+Name,Stub
+Mean,_mean
+Median,_median
+IQR,_IQR
+Whole,_default
+3rd Quartile,_third_quart
+1st Quartile,_first_quart
+Standard Deviation,_std
+Maximum,_max
+Minumum,_min
+Range,_range
+1st Quartile,_1q
+3rd Quartile,_3q
+Median,_med
+IQR,_iqr

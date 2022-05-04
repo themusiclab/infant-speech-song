@@ -1,0 +1,9 @@
+﻿Name,Stub
+Temporal Modulation (Peak),tm_peak_hz
+Temporal Modulation (Standard Deviation),tm_std_hz
+nPVI Recording,npvi_total
+nPVI Phrase,npvi_phrase
+85th Energy Percentile,mir_rolloff85
+Inharmonicity,mir_inharmonicity
+Temporal Modulation (Peak),tm_peak_idx
+Temporal Modulation (Peak),tm_std_idx
