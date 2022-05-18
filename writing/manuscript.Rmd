@@ -117,7 +117,7 @@ load(here("results", "human_lasso.RData"))
 
 \justifying
 \footnotesize
-Courtney B. Hilton$^{1,\wedge,\ast}$, Cody J. Moser$^{1,2,\wedge,\ast}$, Mila Bertolo$^{1}$, Harry Lee-Rubin^1^, Dorsa Amir^3^, Constance M. Bainbridge^1,4^, Jan Simson^1,5^, Dean Knox^6^, Luke Glowacki^7^, Elias Alemu^8^, Andrzej Galbarczyk^9^, Grazyna Jasienska^9^, Cody T. Ross^10^, Mary Beth Neff^11,12^, Alia Martin^11^, Laura K. Cirelli^13,14^, Sandra E. Trehub^14^, Jinqi Song^15^, Minju Kim^16^, Adena Schachner^16^, Tom A. Vardy^17^, Quentin D. Atkinson^17,18^, Amanda Salenius^19^, Jannik Andelin^19^, Jan Antfolk^19^, Purnima Madhivanan^20,21,22,23^, Anand Siddaiah^23^, Caitlyn D. Placek^24^, Gul Deniz Salali^25^, Sarai Keestra^25^, Manvir Singh^26,27^, Scott A. Collins^28^, John Q. Patton^29^, Camila Scaff^30^, Jonathan Stieglitz^27,31^, Silvia Ccari Cutipa^32^, Cristina Moya^33,34^, Rohan R. Sagar^35,36^, Mariamu Anyawire^37^, Audax Mabulla^38^, Brian M. Wood^39^, Max M. Krasnow^1,40^ & Samuel A. Mehr$^{1,41,\ast}$  
+Courtney B. Hilton$^{1,\wedge,\ast}$, Cody J. Moser$^{1,2,\wedge,\ast}$, Mila Bertolo$^{1}$, Harry Lee-Rubin^1^, Dorsa Amir^3^, Constance M. Bainbridge^1,4^, Jan Simson^1,5^, Dean Knox^6^, Luke Glowacki^7^, Elias Alemu^8^, Andrzej Galbarczyk^9^, Grazyna Jasienska^9^, Cody T. Ross^10^, Mary Beth Neff^11,12^, Alia Martin^11^, Laura K. Cirelli^13,14^, Sandra E. Trehub^14^, Jinqi Song^15^, Minju Kim^16^, Adena Schachner^16^, Tom A. Vardy^17^, Quentin D. Atkinson^17,18^, Amanda Salenius^19^, Jannik Andelin^19^, Jan Antfolk^19^, Purnima Madhivanan^20,21,22,23^, Anand Siddaiah^23^, Caitlyn D. Placek^24^, Gul Deniz Salali^25^, Sarai Keestra^25,26^, Manvir Singh^27,28^, Scott A. Collins^29^, John Q. Patton^30^, Camila Scaff^31^, Jonathan Stieglitz^28,32^, Silvia Ccari Cutipa^33^, Cristina Moya^34,35^, Rohan R. Sagar^36,37^, Mariamu Anyawire^38^, Audax Mabulla^39^, Brian M. Wood^40^, Max M. Krasnow^1,41^ & Samuel A. Mehr$^{1,42,\ast}$  
 
 \tiny
 ^1^Department of Psychology, Harvard University, Cambridge, MA 02138, USA.
@@ -145,22 +145,23 @@ Courtney B. Hilton$^{1,\wedge,\ast}$, Cody J. Moser$^{1,2,\wedge,\ast}$, Mila Be
 ^23^Public Health Research Institute of India, Mysuru 570020, India.
 ^24^Department of Anthropology, Ball State University, Muncie, IN 47306, USA.
 ^25^Department of Anthropology, University College London, WC1H 0BW London, UK.
-^26^Department of Human Evolutionary Biology, Harvard University, Cambridge, MA 02138, USA.
-^27^Institute for Advanced Study in Toulouse, 31080 Toulouse Cedex 6, France.
-^28^School of Human Evolution and Social Change, Arizona State University, Tempe, AZ 85281, USA.
-^29^Division of Anthropology, California State University, Fullerton, CA 92831, USA.
-^30^Institute of Evolutionary Medicine, University of Zurich, 8006 Zürich, Switzerland.
-^31^Université Toulouse 1 Capitole, 31080 Toulouse Cedex 6, France.
-^32^Universidad Nacional del Altiplano Puno, Puno 21001, Peru. 
-^33^Department of Anthropology, University of California, Davis, Davis, CA 95616, USA.
-^34^Centre for Culture & Evolution, Brunel University London, UB8 3PH Uxbridge, UK.
-^35^Future Generations University, Circle Ville, WV 26807, USA.
-^36^Harpy Eagle Music Foundation, Georgetown, Guyana.
-^37^Mang'ola, Tanzania.
-^38^Department of Archaeology and Heritage, University of Dar es Salaam, Dar es Salaam, Tanzania.
-^39^Department of Anthropology, University of California, Los Angeles, Los Angeles, CA 90095, USA.
-^40^Division of Continuing Education, Harvard University, Cambridge, MA 02138, USA.
-^41^Data Science Initiative, Harvard University, Cambridge, MA 02138, USA.
+^26^Amsterdam Reproduction & Development, Amsterdam UMC, University of Amsterdam, Meibergdreef 9, Amsterdam, The Netherlands.
+^27^Department of Human Evolutionary Biology, Harvard University, Cambridge, MA 02138, USA.
+^28^Institute for Advanced Study in Toulouse, 31080 Toulouse Cedex 6, France.
+^29^School of Human Evolution and Social Change, Arizona State University, Tempe, AZ 85281, USA.
+^30^Division of Anthropology, California State University, Fullerton, CA 92831, USA.
+^31^Institute of Evolutionary Medicine, University of Zurich, 8006 Zürich, Switzerland.
+^32^Université Toulouse 1 Capitole, 31080 Toulouse Cedex 6, France.
+^33^Universidad Nacional del Altiplano Puno, Puno 21001, Peru. 
+^34^Department of Anthropology, University of California, Davis, Davis, CA 95616, USA.
+^35^Centre for Culture & Evolution, Brunel University London, UB8 3PH Uxbridge, UK.
+^36^Future Generations University, Circle Ville, WV 26807, USA.
+^37^Harpy Eagle Music Foundation, Georgetown, Guyana.
+^38^Mang'ola, Tanzania.
+^39^Department of Archaeology and Heritage, University of Dar es Salaam, Dar es Salaam, Tanzania.
+^40^Department of Anthropology, University of California, Los Angeles, Los Angeles, CA 90095, USA.
+^41^Division of Continuing Education, Harvard University, Cambridge, MA 02138, USA.
+^42^Data Science Initiative, Harvard University, Cambridge, MA 02138, USA.
 
 $^{\wedge}$These authors contributed equally and are listed alphabetically.  
 
