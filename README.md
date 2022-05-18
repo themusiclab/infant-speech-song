@@ -1,6 +1,6 @@
 # Acoustic regularities in infant-directed speech and song across cultures
 
-This is the repository for Hilton & Moser et al. (2022) "Acoustic regularities in infant-directed speech and song across cultures". An open-access version of the paper is available at https://www.biorxiv.org/content/10.1101/2020.04.09.032995v5. 
+This is the repository for Hilton & Moser et al. (2022) "Acoustic regularities in infant-directed speech and song across cultures". An preprint is available at https://www.biorxiv.org/content/10.1101/2020.04.09.032995v5. 
 
 You can find the following here:
 - an R Markdown file that generates the manuscript
@@ -46,3 +46,5 @@ The second version, `naive-listener_jsPsych.html`, and associated jsPsych files,
 #### Supplementary materials
 
 Supplementary data that are not used in the paper, or are only partially analyzed, include`stimuli-rawMetadata.csv`, which contains the manual processing/editing notes of the original raw audio from each fieldsite; `acoustics-meanImputation.csv`, which contains acoustics data cleaned via mean imputation rather than Winsorization; and `fieldsite-supplementaryData.csv` and `PI-survey.pdf`, which contain additional society-level data and the survey used to collect these data.
+
+[![DOI](https://zenodo.org/badge/488404954.svg)](https://zenodo.org/badge/latestdoi/488404954)
