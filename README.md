@@ -19,7 +19,8 @@ Further data and information are available elsewhere:
 
 To render the paper, run the code in `/writing/manuscript.Rmd`.
 
-> :warning: The manuscript file combines output from several `.Rmd` files devoted to analysis, visualization, and the like. The `full_run` flag in `manuscript.Rmd` determines whether analyses and figures should be generated from scratch (which can take > 30 minutes), or not. By default, it is set to `FALSE`, to save knitting time. If you set it to `TRUE`, all preprocessing, analysis, and visualization code will be run.
+> **Warning**  
+> The manuscript file combines output from several `.Rmd` files devoted to analysis, visualization, and the like. The `full_run` flag in `manuscript.Rmd` determines whether analyses and figures should be generated from scratch (which can take > 30 minutes), or not. By default, it is set to `FALSE`, to save knitting time. If you set it to `TRUE`, all preprocessing, analysis, and visualization code will be run.
 
 ### Data and analysis code
 
