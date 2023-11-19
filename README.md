@@ -13,7 +13,7 @@ Further data and information are available elsewhere:
 - the preregistration for the auditory analyses is at https://doi.org/10.17605/osf.io/5r72u
 - you can participate in the naïve listener experiment at <https://themusiclab.org/quizzes/ids>.
 
-**For assistance, please contact the corresponding authors: Courtney Hilton (courtneyhilton@g.harvard.edu), Cody Moser (cmoser2@ucmerced.edu), and Samuel Mehr (sam@wjh.harvard.edu).**
+**For assistance, please contact the corresponding authors: Courtney Hilton (courtney.hilton@auckland.ac.nz), Cody Moser (cmoser2@ucmerced.edu), and Samuel Mehr (sam@wjh.harvard.edu).**
 
 ## Anatomy of the repo
 
